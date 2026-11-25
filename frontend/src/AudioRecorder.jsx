@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { deleteRecording, getRecordings, saveRecording } from './audioStorage.js'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+
 function formatDate(timestamp) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
@@ -18,6 +20,7 @@ export default function AudioRecorder({ onSignOut }) {
   const [recordings, setRecordings] = useState([])
   const [isRecording, setIsRecording] = useState(false)
   const [message, setMessage] = useState('')
+  const [backendStatus, setBackendStatus] = useState('checking')
   const objectUrls = useRef(new Map())
   const mediaRecorder = useRef(null)
   const audioStream = useRef(null)
@@ -37,6 +40,14 @@ export default function AudioRecorder({ onSignOut }) {
         setRecordings(withUrls)
       })
       .catch(() => setMessage('Your browser could not open local audio storage.'))
+
+    fetch(`${API_BASE_URL}/health`)
+      .then((response) => {
+        if (!response.ok) throw new Error('Backend is unavailable')
+        return response.json()
+      })
+      .then(() => setBackendStatus('connected'))
+      .catch(() => setBackendStatus('offline'))
 
     return () => {
       isMounted = false
@@ -82,9 +93,29 @@ export default function AudioRecorder({ onSignOut }) {
           const audioUrl = URL.createObjectURL(audioBlob)
           objectUrls.current.set(id, audioUrl)
           setRecordings((current) => [{ id, audio: audioBlob, createdAt: Date.now(), mimeType: audioBlob.type, audioUrl }, ...current])
-          setMessage('Recording saved on this device.')
         } catch {
           setMessage('The recording finished, but could not be saved in this browser.')
+          return
+        }
+
+        try {
+          const formData = new FormData()
+          formData.append('audio', audioBlob, `recording-${Date.now()}.${fileExtension(audioBlob.type)}`)
+          const response = await fetch(`${API_BASE_URL}/upload-audio`, {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}))
+            throw new Error(result.detail || 'Audio upload failed')
+          }
+
+          setBackendStatus('connected')
+          setMessage('Recording saved on this device and sent to the backend.')
+        } catch (error) {
+          setBackendStatus('offline')
+          setMessage(`Saved on this device, but the backend upload failed: ${error.message}`)
         }
       }
 
@@ -127,6 +158,7 @@ export default function AudioRecorder({ onSignOut }) {
       </header>
 
       <section className="recorder-content">
+        <div className="recorder-status"><span className={`status-dot status-${backendStatus}`} />{backendStatus === 'checking' ? 'Checking backend…' : backendStatus === 'connected' ? 'Backend connected' : 'Backend offline'}</div>
         <span className="step-note"><span className="step-number">03</span><span>A MOMENT TO YOURSELF</span></span>
         <h1 className="recorder-title">A little space<br />to <em>be heard.</em></h1>
         <p className="recorder-intro">Record a voice note and keep it on this device. Your audio stays in this browser.</p>
