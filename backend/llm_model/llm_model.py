@@ -3,7 +3,6 @@ from google import genai
 from google.genai import types
 from .intent_classifier import IntentSchema
 from .prompt import intent_clasify_prompt as prompt
-from .classify_intent_action import intent_action
 
 client = genai.Client(
     vertexai=True,
@@ -13,9 +12,7 @@ client = genai.Client(
 
 def vertex_model(transcription):
     print("Transcription received:", transcription)
-    # Next function call
     intent = classify_intent(transcription)
-    result = intent_action(intent)
     print("Detected intent:", intent)
     return intent
 

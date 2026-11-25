@@ -6,7 +6,7 @@ def intent_action(intent):
     and any additional entities related to the intent.
     """
     if intent.intent == "GREETING":
-        return greeting(intent.response)
+        return greeting(intent.response, intent.response_language)
 
     elif intent.intent == "OPEN_APP":
         return {
@@ -32,17 +32,17 @@ def intent_action(intent):
             "requires_confirmation": True,
             "entities": {"items": intent.entities.get("items")}
         }
-    elif intent.intent == "GENERAL_QUESTION":
+    elif intent.intent in {"GENERAL_QUESTION", "GENERAL_CONVERSATION"}:
+        language = intent.response_language.lower().split("-", 1)[0]
+        warning = (
+            "यहाँ चैट करना उपयुक्त नहीं है।"
+            if language == "hi"
+            else "This is not the place for chatting."
+        )
         return {
-            "response": intent.response,
+            "response": f"{intent.response}\n\n{warning}",
             "requires_confirmation": False,
-            "entities": {}
-        }
-    elif intent.intent == "GENERAL_CONVERSATION":
-        return {
-            "response": intent.response,
-            "requires_confirmation": False,
-            "entities": {}
+            "entities": {},
         }
     else:  # UNKNOWN
         return {

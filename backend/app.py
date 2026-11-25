@@ -6,11 +6,10 @@ from uuid import uuid4
 from fastapi import APIRouter, FastAPI, File, HTTPException, UploadFile
 from faster_whisper import WhisperModel
 
-from agents.speech import generate_voice
 from llm_model.classify_intent_action import intent_action
 from llm_model.llm_model import vertex_model
 
-VOICE_INTENTS = {"GREETING", "GENERAL_QUESTION", "GENERAL_CONVERSATION"}
+REPLY_INTENTS = {"GREETING", "GENERAL_QUESTION", "GENERAL_CONVERSATION"}
 
 router = APIRouter(tags=["health"])
 
@@ -34,10 +33,10 @@ def upload_audio(audio: UploadFile = File(...)):
         raise HTTPException(status_code=502, detail="The AI returned no structured response.")
 
     payload = {**result.model_dump(mode="json"), "text": transcription, "voice": None}
-    if result.intent in VOICE_INTENTS:
+    if result.intent in REPLY_INTENTS:
         action = intent_action(result)
         payload["response"] = action["response"]
-        payload["voice"] = generate_voice(action["response"], result.response_language)
+        payload["voice"] = action.get("voice")
     return payload
 
 
