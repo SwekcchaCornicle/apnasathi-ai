@@ -1,31 +1,35 @@
 from fastapi import APIRouter, FastAPI, UploadFile, File, HTTPException
 import os
+from faster_whisper import WhisperModel
+
+from llm_model.llm_model import vertex_model
 
 router = APIRouter(tags=["health"])
 
-UPLOAD_DIR = r"C:\audio_files"
+UPLOAD_DIR = r"C:\Users\singh\OneDrive\Desktop\apnasathi-ai\audio_files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+model = WhisperModel("base")
+
 @router.post("/upload-audio")
 async def upload_audio(audio: UploadFile = File(...)):
-    if not audio.content_type.startswith("audio/"):
-        raise HTTPException(
-            status_code=400,
-            detail="Only audio files are allowed"
-        )
 
     file_path = os.path.join(UPLOAD_DIR, audio.filename)
 
     with open(file_path, "wb") as f:
-        content = await audio.read()
-        f.write(content)
+        f.write(await audio.read())
+
+    # Convert speech to text
+    segments, info = model.transcribe(file_path)
+
+    transcription = " ".join(
+        segment.text for segment in segments
+    )
+    vertex_model(transcription)
 
     return {
-        "message": "Audio uploaded successfully",
-        "filename": audio.filename,
-        "content_type": audio.content_type,
-        "saved_path": file_path,
+        "text": transcription
     }
 
 
@@ -37,7 +41,7 @@ def health():
 app = FastAPI(
     title="Apna Sathi AI",
     version="0.1.0",
-    description="use this to operate other apps",
+    description="use this to operate other app",
 )
 
 app.include_router(router, prefix="/api/v1")
