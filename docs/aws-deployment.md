@@ -126,26 +126,25 @@ service-account key is needed.
   An approved infrastructure rollout must create the service and ECR first,
   with desired count zero. Set its immutable SHA tag and count one only
   after an image exists and external access has been validated.
-- GitHub remains manual-only on `main`. All switches default to off.
-  For backend rollouts set `AWS_ROLE_ARN` to the existing GitHub Actions
-  backend deployment role. For explicitly approved infrastructure runs,
-  use a distinct `INFRASTRUCTURE_ROLE_ARN` with its own OIDC trust and
-  CloudFormation permissions. Bootstrap, if required, is a separate approved
-  administrator operation. For application selection set `BACKEND_IMAGE_TAG`
-  and `BACKEND_DESIRED_COUNT` explicitly.
-  For Vertex set `GOOGLE_CLOUD_PROJECT`, `GOOGLE_WIF_SECRET_ARN`, and optionally
-  `GOOGLE_CLOUD_LOCATION`. Select egress through `NETWORK_EGRESS`, with
-  `BACKEND_HTTPS_PROXY` required for proxy mode.
-  The backend workflow reads the current service task definition, verifies the family, ARM64,
-  backend container, and WIF secret, then builds and smoke-tests the
-  root-context image offline before pushing its SHA tag. After registration
-  and update it waits for stability and rejects rollback to a different
-  revision. Verify live policy v2 includes the repository-scoped ECR push
-  permissions in the checked-in policy, including `ecr:BatchGetImage`.
+- Run **Deploy ApnaSathi Infrastructure** and **Deploy ApnaSathi Application**
+  separately from GitHub Actions on `main`. Both call the reusable bootstrap
+  workflow first. It queries `CDKToolkit` with `INFRASTRUCTURE_ROLE_ARN` and skips
+  bootstrap for an already-bootstrapped environment. If the stack is missing,
+  it requires a distinct, authorized `BOOTSTRAP_ROLE_ARN`. The backend job
+  uses only `AWS_ROLE_ARN` for its deployment operations.
+- Infrastructure deploys all four stacks in dependency order. Set
+  `BACKEND_IMAGE_TAG=v1` and `BACKEND_DESIRED_COUNT=0` initially. Add
+  `GOOGLE_CLOUD_PROJECT`, `GOOGLE_WIF_SECRET_ARN` and optionally
+  `GOOGLE_CLOUD_LOCATION` once federation is configured. Select egress through
+  `NETWORK_EGRESS`, using `BACKEND_HTTPS_PROXY` for proxy mode. After each
+  successful application rollout, reconcile the CDK image tag and desired
+  count before the next infrastructure deployment.
+- Application checks the service's current task definition, builds and
+  smoke-tests the ARM64 image, pushes its immutable commit-SHA tag, and
+  verifies ECS stabilized on the expected revision. Verify live policy v2
+  includes the repository-scoped ECR push permissions in the checked-in policy,
+  including `ecr:BatchGetImage`. An immutable tag rejects re-pushing the same SHA.
   [AWS ECR push permissions](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-push-iam.html).
-  An immutable tag
-  rejects re-pushing the same SHA. Use a new SHA or have an authorized
-  operator reuse the already-published image. No live IAM policy was changed.
 - Before public traffic, require verified user authentication and rate
   limiting. Test Vertex with a short non-sensitive prompt, S3 with a test
   recording, and Instagram with a professional test account after approval.
@@ -158,7 +157,7 @@ From the repository root:
 uv lock --check
 .venv\Scripts\python.exe -B -m unittest discover -s backend/tests -v
 .venv\Scripts\python.exe -B -m unittest discover -s aws_cloud/tests -v
-actionlint .github\workflows\deploy.yaml
+actionlint .github\workflows\deploy.yaml .github\workflows\deploy-infrastructure.yaml .github\workflows\bootstrap.yaml
 docker buildx build --platform linux/arm64 --load -t apnasathi-backend:local .
 docker image inspect apnasathi-backend:local --format "{{.Os}}/{{.Architecture}}"
 docker run --rm --name apnasathi-local --platform linux/arm64 -p 127.0.0.1:8000:8000 apnasathi-backend:local

@@ -1,0 +1,74 @@
+name: Deploy ApnaSathi Infrastructure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: apnasathi-manual-ecs-deployment
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  CDK_DEFAULT_ACCOUNT: "553607360155"
+  ECR_REPOSITORY: apnasathi-backend
+  ECS_CLUSTER: apnasathi-dev-cluster
+  ECS_SERVICE: apnasathi-backend-service
+
+jobs:
+  bootstrap:
+    uses: ./.github/workflows/bootstrap.yaml
+
+  deploy:
+    needs: bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate for selected infrastructure changes
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Synthesize and deploy all four stacks
+        working-directory: aws_cloud
+        env:
+          GOOGLE_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+          GOOGLE_LOCATION: ${{ vars.GOOGLE_CLOUD_LOCATION }}
+          WIF_SECRET_ARN: ${{ vars.GOOGLE_WIF_SECRET_ARN }}
+          NETWORK_EGRESS: ${{ vars.NETWORK_EGRESS }}
+          HTTPS_PROXY_URL: ${{ vars.BACKEND_HTTPS_PROXY }}
+          BASELINE_IMAGE_TAG: ${{ vars.BACKEND_IMAGE_TAG }}
+          BASELINE_DESIRED_COUNT: ${{ vars.BACKEND_DESIRED_COUNT }}
+        run: |
+          set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$ACCOUNT" == "$CDK_DEFAULT_ACCOUNT" ]] || { echo "::error::Unexpected AWS account."; exit 1; }
+          python -m pip install -r requirements.txt
+          if [[ -z "$BASELINE_IMAGE_TAG" || -z "$BASELINE_DESIRED_COUNT" ]]; then
+            echo "::error::Set BACKEND_IMAGE_TAG and BACKEND_DESIRED_COUNT explicitly."
+            exit 1
+          fi
+          context=(-c "networkEgress=${NETWORK_EGRESS:-none}")
+          if [[ -n "$GOOGLE_PROJECT" || -n "$WIF_SECRET_ARN" ]]; then
+            context+=(-c "googleCloudProject=$GOOGLE_PROJECT" -c "googleWifSecretArn=$WIF_SECRET_ARN" -c "googleCloudLocation=${GOOGLE_LOCATION:-global}")
+          fi
+          if [[ -n "$HTTPS_PROXY_URL" ]]; then context+=(-c "backendHttpsProxy=$HTTPS_PROXY_URL"); fi
+          if [[ -n "$BASELINE_IMAGE_TAG" ]]; then context+=(-c "backendImageTag=$BASELINE_IMAGE_TAG"); fi
+          if [[ -n "$BASELINE_DESIRED_COUNT" ]]; then context+=(-c "backendDesiredCount=$BASELINE_DESIRED_COUNT"); fi
+          npx --yes aws-cdk@2.1149.0 synth --no-lookups --quiet "${context[@]}"
+          npx --yes aws-cdk@2.1149.0 deploy --all --require-approval never "${context[@]}"
+

@@ -1,28 +1,7 @@
-name: ApnaSathi AWS Deployment
+name: Deploy ApnaSathi Application
 
 on:
   workflow_dispatch:
-    inputs:
-      deploy_network:
-        description: Deploy NetworkStack
-        type: boolean
-        default: false
-      deploy_database:
-        description: Deploy DatabaseStack
-        type: boolean
-        default: false
-      deploy_infrastructure:
-        description: Deploy InfrastructureStack
-        type: boolean
-        default: false
-      deploy_application:
-        description: Deploy ApplicationStack
-        type: boolean
-        default: false
-      deploy_backend:
-        description: Build, validate and roll out the backend image
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -38,93 +17,19 @@ env:
   ECR_REPOSITORY: apnasathi-backend
   ECS_CLUSTER: apnasathi-dev-cluster
   ECS_SERVICE: apnasathi-backend-service
-  RUN_INFRA: ${{ inputs.deploy_network || inputs.deploy_database || inputs.deploy_infrastructure || inputs.deploy_application }}
 
 jobs:
+  bootstrap:
+    uses: ./.github/workflows/bootstrap.yaml
+
   deploy:
+    needs: bootstrap
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate selected operations
-        env:
-          RUN_BACKEND: ${{ inputs.deploy_backend }}
-          ECS_ROLE: ${{ vars.AWS_ROLE_ARN }}
-          INFRA_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
-        run: |
-          set -euo pipefail
-          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "::error::Run from main."; exit 1; }
-          [[ "$RUN_INFRA" == true || "$RUN_BACKEND" == true ]] || { echo "::error::Select a deployment operation."; exit 1; }
-          if [[ "$RUN_INFRA" == true && ( -z "$INFRA_ROLE" || "$INFRA_ROLE" == "$ECS_ROLE" ) ]]; then
-            echo "::error::Infrastructure deployment requires a separate authorized role."
-            exit 1
-          fi
-          if [[ "$RUN_BACKEND" == true && -z "$ECS_ROLE" ]]; then
-            echo "::error::Configure AWS_ROLE_ARN for backend deployments."
-            exit 1
-          fi
-
-      - name: Authenticate for selected infrastructure changes
-        if: env.RUN_INFRA == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: actions/setup-node@v4
-        if: env.RUN_INFRA == 'true'
-        with:
-          node-version: "22"
-
-      - uses: actions/setup-python@v5
-        if: env.RUN_INFRA == 'true'
-        with:
-          python-version: "3.13"
-
-      - name: Apply only the selected infrastructure stacks
-        if: env.RUN_INFRA == 'true'
-        working-directory: aws_cloud
-        env:
-          SELECT_NETWORK: ${{ inputs.deploy_network }}
-          SELECT_DATABASE: ${{ inputs.deploy_database }}
-          SELECT_INFRASTRUCTURE: ${{ inputs.deploy_infrastructure }}
-          SELECT_APPLICATION: ${{ inputs.deploy_application }}
-          GOOGLE_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
-          GOOGLE_LOCATION: ${{ vars.GOOGLE_CLOUD_LOCATION }}
-          WIF_SECRET_ARN: ${{ vars.GOOGLE_WIF_SECRET_ARN }}
-          NETWORK_EGRESS: ${{ vars.NETWORK_EGRESS }}
-          HTTPS_PROXY_URL: ${{ vars.BACKEND_HTTPS_PROXY }}
-          BASELINE_IMAGE_TAG: ${{ vars.BACKEND_IMAGE_TAG }}
-          BASELINE_DESIRED_COUNT: ${{ vars.BACKEND_DESIRED_COUNT }}
-        run: |
-          set -euo pipefail
-          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-          [[ "$ACCOUNT" == "$CDK_DEFAULT_ACCOUNT" ]] || { echo "::error::Unexpected AWS account."; exit 1; }
-          python -m pip install -r requirements.txt
-          stacks=()
-          if [[ "$SELECT_NETWORK" == true ]]; then stacks+=(ApnaSathiNetworkStack); fi
-          if [[ "$SELECT_DATABASE" == true ]]; then stacks+=(ApnaSathiDatabaseStack); fi
-          if [[ "$SELECT_INFRASTRUCTURE" == true ]]; then stacks+=(ApnaSathiInfrastructureStack); fi
-          if [[ "$SELECT_APPLICATION" == true ]]; then
-            if [[ -z "$BASELINE_IMAGE_TAG" || -z "$BASELINE_DESIRED_COUNT" ]]; then
-              echo "::error::Set the ApplicationStack baseline image tag and desired count explicitly."
-              exit 1
-            fi
-            stacks+=(ApnaSathiApplicationStack)
-          fi
-          context=(-c "networkEgress=${NETWORK_EGRESS:-none}")
-          if [[ -n "$GOOGLE_PROJECT" || -n "$WIF_SECRET_ARN" ]]; then
-            context+=(-c "googleCloudProject=$GOOGLE_PROJECT" -c "googleWifSecretArn=$WIF_SECRET_ARN" -c "googleCloudLocation=${GOOGLE_LOCATION:-global}")
-          fi
-          if [[ -n "$HTTPS_PROXY_URL" ]]; then context+=(-c "backendHttpsProxy=$HTTPS_PROXY_URL"); fi
-          if [[ -n "$BASELINE_IMAGE_TAG" ]]; then context+=(-c "backendImageTag=$BASELINE_IMAGE_TAG"); fi
-          if [[ -n "$BASELINE_DESIRED_COUNT" ]]; then context+=(-c "backendDesiredCount=$BASELINE_DESIRED_COUNT"); fi
-          npx --yes aws-cdk@2.1149.0 synth --no-lookups --quiet "${context[@]}"
-          npx --yes aws-cdk@2.1149.0 deploy --exclusively --require-approval never "${context[@]}" "${stacks[@]}"
-
       - name: Authenticate with the backend deployment role
-        if: inputs.deploy_backend
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
@@ -132,7 +37,6 @@ jobs:
           unset-current-credentials: true
 
       - name: Download and validate the service task definition
-        if: inputs.deploy_backend
         id: current
         run: |
           set -euo pipefail
@@ -150,17 +54,13 @@ jobs:
           ' task-definition.json > /dev/null
 
       - uses: docker/setup-qemu-action@v3
-        if: inputs.deploy_backend
 
       - uses: docker/setup-buildx-action@v3
-        if: inputs.deploy_backend
 
       - uses: aws-actions/amazon-ecr-login@v2
-        if: inputs.deploy_backend
         id: ecr
 
       - name: Build, smoke-test, and push immutable ARM64 image
-        if: inputs.deploy_backend
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
@@ -184,7 +84,6 @@ jobs:
           exit 1
 
       - name: Register and roll out the validated image
-        if: inputs.deploy_backend
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
