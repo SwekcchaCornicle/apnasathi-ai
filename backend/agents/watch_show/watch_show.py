@@ -83,6 +83,17 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
         ) from exc
 
 
+def get_status_message(status: str, language: str) -> str:
+    messages = {
+        "playing": ("Video is playing in the other browser.", "वीडियो दूसरे ब्राउज़र में प्ले हो रहा है।"),
+        "login_required": ("You are not logged in.", "आप ऐप में लॉग इन नहीं हैं।"),
+        "failed": ("I couldn't start the video.", "वीडियो प्ले नहीं हो सका।"),
+        "missing_title": ("Which video would you like to watch?", "आप कौन सा वीडियो देखना चाहते हैं?"),
+    }
+    english, hindi = messages[status]
+    return hindi if language.lower().split("-", 1)[0] == "hi" else english
+
+
 def watch_show(show_name, language):
     status = "failed"
     if not isinstance(show_name, str) or not show_name.strip():
@@ -103,14 +114,7 @@ def watch_show(show_name, language):
         except (RuntimeError, ValueError):
             logger.warning("Could not look up a Prime Video link.")
 
-    messages = {
-        "playing": ("Video is playing in the other browser.", "वीडियो दूसरे ब्राउज़र में प्ले हो रहा है।"),
-        "login_required": ("You are not logged in.", "आप ऐप में लॉग इन नहीं हैं।"),
-        "failed": ("I couldn't start the video.", "वीडियो प्ले नहीं हो सका।"),
-        "missing_title": ("Which video would you like to watch?", "आप कौन सा वीडियो देखना चाहते हैं?"),
-    }
-    english, hindi = messages[status]
-    message = hindi if language.lower().split("-", 1)[0] == "hi" else english
+    message = get_status_message(status, language)
     return {
         "response": message,
         "playback_status": status,
