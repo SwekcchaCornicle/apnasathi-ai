@@ -18,14 +18,6 @@ env = cdk.Environment(
     region="ap-south-1",
 )
 
-# ACM certificate ARN must be supplied through CDK context.
-certificate_arn = app.node.try_get_context("certificateArn")
-
-if not isinstance(certificate_arn, str) or not re.fullmatch(
-    r"arn:aws:acm:ap-south-1:[0-9]{12}:certificate/[0-9a-fA-F-]{36}", certificate_arn
-):
-    raise ValueError("Pass a Mumbai ACM certificate ARN using -c certificateArn=YOUR_CERTIFICATE_ARN")
-
 # Keep infrastructure-only development synths safe until an image has been published.
 desired_count = str(app.node.try_get_context("backendDesiredCount") or "0")
 if not re.fullmatch(r"[0-9]+", desired_count):
@@ -42,9 +34,30 @@ if not isinstance(image_tag, str) or not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.
 # Stack 1: Network
 # -------------------------------------------------
 
+egress_mode = app.node.try_get_context("networkEgress") or "none"
+if egress_mode not in {"none", "nat", "proxy"}:
+    raise ValueError("networkEgress must be none, nat, or proxy.")
+proxy_url = app.node.try_get_context("backendHttpsProxy")
+if (egress_mode == "proxy") != bool(proxy_url) or (
+    proxy_url and not re.fullmatch(r"https?://[a-zA-Z0-9.-]+:[0-9]{1,5}", proxy_url)
+):
+    raise ValueError("Proxy mode requires backendHttpsProxy=http://HOST:PORT without credentials.")
+
+google_project = app.node.try_get_context("googleCloudProject")
+google_location = app.node.try_get_context("googleCloudLocation") or "global"
+wif_secret_arn = app.node.try_get_context("googleWifSecretArn")
+if bool(google_project) != bool(wif_secret_arn):
+    raise ValueError("Set both googleCloudProject and googleWifSecretArn for ECS Vertex access.")
+if wif_secret_arn and not re.fullmatch(
+    rf"arn:aws:secretsmanager:ap-south-1:{env.account or '[0-9]{12}'}:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{{6}}",
+    wif_secret_arn,
+):
+    raise ValueError("googleWifSecretArn must be a complete Secrets Manager ARN in this AWS account and region.")
+
 network_stack = NetworkStack(
     app,
     "ApnaSathiNetworkStack",
+    enable_nat=egress_mode == "nat",
     env=env,
 )
 
@@ -86,10 +99,13 @@ application_stack = ApplicationStack(
     backend_security_group=network_stack.backend_security_group,
     vpc_id=network_stack.vpc.ref,
     database=database_stack,
-    certificate_arn=certificate_arn,
     audio_bucket=infrastructure_stack.audio_bucket,
     desired_count=int(desired_count),
     image_tag=image_tag,
+    google_project=google_project,
+    google_location=google_location,
+    wif_secret_arn=wif_secret_arn,
+    https_proxy=proxy_url,
     env=env,
 )
 

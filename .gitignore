@@ -1,2 +1,4 @@
 .env
 /aws_cloud/env_parameters.json
+cdk.out/
+__pycache__/

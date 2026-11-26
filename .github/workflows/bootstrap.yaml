@@ -1,0 +1,90 @@
+name: Ensure ApnaSathi CDK Bootstrap
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ACCOUNT: "553607360155"
+
+jobs:
+  ensure-bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate workflow and role settings
+        env:
+          CHECK_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          DEPLOY_ROLE: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "::error::Run from main."; exit 1; }
+          [[ -n "$CHECK_ROLE" && "$CHECK_ROLE" != "$DEPLOY_ROLE" ]] || {
+            echo "::error::Configure an infrastructure role distinct from AWS_ROLE_ARN."
+            exit 1
+          }
+
+      - name: Authenticate for the bootstrap check
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check CDKToolkit
+        id: toolkit
+        run: |
+          set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$ACCOUNT" == "$AWS_ACCOUNT" ]] || { echo "::error::Unexpected AWS account."; exit 1; }
+          if STATUS=$(aws cloudformation describe-stacks --stack-name CDKToolkit --query 'Stacks[0].StackStatus' --output text 2> toolkit-error.txt); then
+            case "$STATUS" in
+              CREATE_COMPLETE|UPDATE_COMPLETE|UPDATE_ROLLBACK_COMPLETE)
+                echo "CDKToolkit is already bootstrapped."
+                echo "missing=false" >> "$GITHUB_OUTPUT"
+                ;;
+              *) echo "::error::CDKToolkit is in state $STATUS."; exit 1 ;;
+            esac
+          elif grep -Fq 'Stack with id CDKToolkit does not exist' toolkit-error.txt; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          else
+            cat toolkit-error.txt >&2
+            exit 1
+          fi
+
+      - name: Validate bootstrap administrator role
+        if: steps.toolkit.outputs.missing == 'true'
+        env:
+          BOOTSTRAP_ROLE: ${{ vars.BOOTSTRAP_ROLE_ARN }}
+          INFRA_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          DEPLOY_ROLE: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          [[ -n "$BOOTSTRAP_ROLE" && "$BOOTSTRAP_ROLE" != "$INFRA_ROLE" && "$BOOTSTRAP_ROLE" != "$DEPLOY_ROLE" ]] || {
+            echo "::error::CDKToolkit is missing. Configure a separate authorized BOOTSTRAP_ROLE_ARN."
+            exit 1
+          }
+
+      - uses: actions/setup-node@v4
+        if: steps.toolkit.outputs.missing == 'true'
+        with:
+          node-version: "22"
+
+      - name: Authenticate for initial bootstrap
+        if: steps.toolkit.outputs.missing == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.BOOTSTRAP_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          unset-current-credentials: true
+
+      - name: Bootstrap the missing environment
+        if: steps.toolkit.outputs.missing == 'true'
+        run: |
+          set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$ACCOUNT" == "$AWS_ACCOUNT" ]] || { echo "::error::Unexpected AWS account."; exit 1; }
+          npx --yes aws-cdk@2.1149.0 bootstrap "aws://$AWS_ACCOUNT/$AWS_REGION"
