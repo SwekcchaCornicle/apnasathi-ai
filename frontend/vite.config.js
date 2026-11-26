@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api/v1': {
-        target: 'http://192.168.1.4:8006',
+        target: 'http://apnasathi-dev-alb-791654695.ap-south-1.elb.amazonaws.com',
         changeOrigin: true,
       },
     },

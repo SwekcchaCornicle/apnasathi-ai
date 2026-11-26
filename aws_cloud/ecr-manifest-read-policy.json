@@ -1,0 +1,11 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadApnaSathiImageManifest",
+      "Effect": "Allow",
+      "Action": "ecr:BatchGetImage",
+      "Resource": "arn:aws:ecr:ap-south-1:553607360155:repository/apnasathi-backend"
+    }
+  ]
+}

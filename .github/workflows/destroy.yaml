@@ -1,0 +1,188 @@
+name: Destroy ApnaSathi AWS Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type "destroy apnasathi and cdktoolkit" to permanently delete this environment and its bootstrap assets. Confirm CDKToolkit is dedicated to ApnaSathi.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: apnasathi-manual-ecs-deployment
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-1
+  AWS_ACCOUNT: "553607360155"
+  AWS_PAGER: ""
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Validate teardown request
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          BOOTSTRAP_ROLE: ${{ vars.BOOTSTRAP_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "::error::Run from main."; exit 1; }
+          [[ "$CONFIRMATION" == "destroy apnasathi and cdktoolkit" ]] || {
+            echo "::error::Confirmation text does not match."
+            exit 1
+          }
+          [[ -n "$BOOTSTRAP_ROLE" ]] || { echo "::error::Configure BOOTSTRAP_ROLE_ARN."; exit 1; }
+
+      - name: Authenticate with the bootstrap administrator role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.BOOTSTRAP_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT }}
+
+      - name: Delete the application, database, infrastructure, and network, then CDKToolkit
+        run: |
+          set -euo pipefail
+
+          delete_if_missing_ok() {
+            local missing_pattern=$1 output
+            shift
+            if output=$("$@" 2>&1); then
+              return 0
+            fi
+            if [[ "$output" != *"$missing_pattern"* ]]; then
+              printf '%s\n' "$output" >&2
+              return 1
+            fi
+          }
+
+          delete_bucket() {
+            local bucket=$1 versioning list_command items batch result
+            local -a owner=(--bucket "$bucket" --expected-bucket-owner "$AWS_ACCOUNT")
+            if ! versioning=$(aws s3api get-bucket-versioning "${owner[@]}" --output json 2>&1); then
+              [[ "$versioning" == *"(NoSuchBucket)"* ]] && return 0
+              printf '%s\n' "$versioning" >&2
+              return 1
+            fi
+
+            [[ -n "$versioning" ]] || versioning='{}'
+            list_command=list-objects-v2
+            if jq -e '.Status == "Enabled" or .Status == "Suspended"' <<< "$versioning" >/dev/null; then
+              list_command=list-object-versions
+            fi
+            while true; do
+              items=$(aws s3api "$list_command" "${owner[@]}" --no-paginate --max-keys 1000 --output json)
+              batch=$(jq -c '{Objects: (
+                [.Contents[]? | {Key}] +
+                [(.Versions[]?, .DeleteMarkers[]?) | {Key, VersionId}]
+              ), Quiet: true}' <<< "$items")
+              if [[ $(jq '.Objects | length' <<< "$batch") == 0 ]]; then
+                break
+              fi
+              result=$(aws s3api delete-objects "${owner[@]}" --delete "$batch" --output json)
+              if ! jq -e '(.Errors // []) | length == 0' <<< "$result" >/dev/null; then
+                printf '%s\n' "$result" >&2
+                return 1
+              fi
+            done
+            delete_if_missing_ok '(NoSuchBucket)' aws s3api delete-bucket "${owner[@]}"
+          }
+
+          delete_stack() {
+            local stack=$1 details stack_id status resources buckets repositories bucket repository
+            echo "::group::Delete $stack"
+            if ! details=$(aws cloudformation describe-stacks --stack-name "$stack" --query 'Stacks[0]' --output json 2>&1); then
+              if [[ "$details" == *"Stack with id $stack does not exist"* ]]; then
+                echo "$stack is already absent."
+                echo "::endgroup::"
+                return 0
+              fi
+              printf '%s\n' "$details" >&2
+              return 1
+            fi
+            stack_id=$(jq -er '.StackId' <<< "$details")
+            status=$(jq -er '.StackStatus' <<< "$details")
+
+            if [[ "$status" != DELETE_IN_PROGRESS ]]; then
+              if [[ "$status" == *_IN_PROGRESS ]]; then
+                echo "::error::$stack is busy ($status)."
+                return 1
+              fi
+              resources=$(aws cloudformation list-stack-resources --stack-name "$stack_id" --output json)
+              buckets=$(jq -r '.StackResourceSummaries[] |
+                select(.ResourceType == "AWS::S3::Bucket" and .ResourceStatus != "DELETE_COMPLETE") |
+                .PhysicalResourceId // empty' <<< "$resources")
+              repositories=$(jq -r '.StackResourceSummaries[] |
+                select(.ResourceType == "AWS::ECR::Repository" and .ResourceStatus != "DELETE_COMPLETE") |
+                .PhysicalResourceId // empty' <<< "$resources")
+
+              while IFS= read -r bucket; do
+                if [[ -n "$bucket" ]]; then
+                  delete_bucket "$bucket"
+                fi
+              done <<< "$buckets"
+              while IFS= read -r repository; do
+                if [[ -n "$repository" ]]; then
+                  delete_if_missing_ok '(RepositoryNotFoundException)' aws ecr delete-repository \
+                    --registry-id "$AWS_ACCOUNT" --repository-name "$repository" --force
+                fi
+              done <<< "$repositories"
+
+              if jq -e '.EnableTerminationProtection == true' <<< "$details" >/dev/null; then
+                aws cloudformation update-termination-protection --stack-name "$stack_id" --no-enable-termination-protection
+              fi
+              aws cloudformation delete-stack --stack-name "$stack_id"
+            fi
+
+            if ! aws cloudformation wait stack-delete-complete --stack-name "$stack_id"; then
+              aws cloudformation describe-stack-events --stack-name "$stack_id" \
+                --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceStatusReason]' --output table
+              return 1
+            fi
+            echo "::endgroup::"
+          }
+
+          delete_stack ApnaSathiApplicationStack
+          for log_group in /apnasathi/backend /aws/ecs/containerinsights/apnasathi-dev-cluster/performance; do
+            delete_if_missing_ok '(ResourceNotFoundException)' aws logs delete-log-group --log-group-name "$log_group"
+          done
+
+          # Application deployments register additional task definition revisions outside CloudFormation.
+          for state in ACTIVE INACTIVE; do
+            definitions=$(aws ecs list-task-definitions --family-prefix apnasathi-backend --status "$state" --output json)
+            revisions=$(jq -r '.taskDefinitionArns[] |
+              select(contains(":task-definition/apnasathi-backend:"))' <<< "$definitions")
+            while IFS= read -r revision; do
+              [[ -n "$revision" ]] || continue
+              if [[ "$state" == ACTIVE ]]; then
+                aws ecs deregister-task-definition --task-definition "$revision" >/dev/null
+              else
+                result=$(aws ecs delete-task-definitions --task-definitions "$revision" --output json)
+                jq -e '(.failures // []) | length == 0' <<< "$result" >/dev/null || {
+                  printf '%s\n' "$result" >&2
+                  exit 1
+                }
+              fi
+            done <<< "$revisions"
+          done
+
+          delete_stack ApnaSathiDatabaseStack
+          # The stack creates a final snapshot. Remove manual snapshots for this exact DB identifier.
+          snapshots=$(aws rds describe-db-snapshots --snapshot-type manual \
+            --query 'DBSnapshots[?DBInstanceIdentifier==`apnasathi-dev-db`].DBSnapshotIdentifier' --output json)
+          snapshot_ids=$(jq -r '.[]' <<< "$snapshots")
+          while IFS= read -r snapshot; do
+            [[ -n "$snapshot" ]] || continue
+            delete_if_missing_ok '(DBSnapshotNotFound)' aws rds delete-db-snapshot --db-snapshot-identifier "$snapshot"
+            aws rds wait db-snapshot-deleted --db-snapshot-identifier "$snapshot"
+          done <<< "$snapshot_ids"
+
+          delete_stack ApnaSathiInfrastructureStack
+          delete_stack ApnaSathiNetworkStack
+          delete_stack CDKToolkit
