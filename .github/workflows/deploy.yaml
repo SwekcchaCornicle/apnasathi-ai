@@ -1,7 +1,28 @@
-name: ApnaSathi AI - Deploy Backend
+name: ApnaSathi AWS Deployment
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_network:
+        description: Deploy NetworkStack
+        type: boolean
+        default: false
+      deploy_database:
+        description: Deploy DatabaseStack
+        type: boolean
+        default: false
+      deploy_infrastructure:
+        description: Deploy InfrastructureStack
+        type: boolean
+        default: false
+      deploy_application:
+        description: Deploy ApplicationStack
+        type: boolean
+        default: false
+      deploy_backend:
+        description: Build, validate and roll out the backend image
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -11,134 +32,174 @@ concurrency:
   group: apnasathi-manual-ecs-deployment
   cancel-in-progress: false
 
+env:
+  AWS_REGION: ap-south-1
+  CDK_DEFAULT_ACCOUNT: "553607360155"
+  ECR_REPOSITORY: apnasathi-backend
+  ECS_CLUSTER: apnasathi-dev-cluster
+  ECS_SERVICE: apnasathi-backend-service
+  RUN_INFRA: ${{ inputs.deploy_network || inputs.deploy_database || inputs.deploy_infrastructure || inputs.deploy_application }}
+
 jobs:
   deploy:
-    name: Build and Deploy to AWS ECS
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
-      ECS_SERVICE: ${{ vars.ECS_SERVICE }}
-
+    timeout-minutes: 55
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Validate deployment configuration
-        shell: bash
+      - name: Validate selected operations
+        env:
+          RUN_BACKEND: ${{ inputs.deploy_backend }}
+          ECS_ROLE: ${{ vars.AWS_ROLE_ARN }}
+          INFRA_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
         run: |
           set -euo pipefail
-          for name in AWS_REGION AWS_ROLE_ARN ECR_REPOSITORY ECS_CLUSTER ECS_SERVICE; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::Required repository variable $name is missing."
-              exit 1
-            fi
-          done
+          [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "::error::Run from main."; exit 1; }
+          [[ "$RUN_INFRA" == true || "$RUN_BACKEND" == true ]] || { echo "::error::Select a deployment operation."; exit 1; }
+          if [[ "$RUN_INFRA" == true && ( -z "$INFRA_ROLE" || "$INFRA_ROLE" == "$ECS_ROLE" ) ]]; then
+            echo "::error::Infrastructure deployment requires a separate authorized role."
+            exit 1
+          fi
+          if [[ "$RUN_BACKEND" == true && -z "$ECS_ROLE" ]]; then
+            echo "::error::Configure AWS_ROLE_ARN for backend deployments."
+            exit 1
+          fi
 
-      - name: Configure AWS credentials using OIDC
+      - name: Authenticate for selected infrastructure changes
+        if: env.RUN_INFRA == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify AWS identity
-        run: aws sts get-caller-identity
+      - uses: actions/setup-node@v4
+        if: env.RUN_INFRA == 'true'
+        with:
+          node-version: "22"
 
-      - name: Login to Amazon ECR
+      - uses: actions/setup-python@v5
+        if: env.RUN_INFRA == 'true'
+        with:
+          python-version: "3.13"
+
+      - name: Apply only the selected infrastructure stacks
+        if: env.RUN_INFRA == 'true'
+        working-directory: aws_cloud
+        env:
+          SELECT_NETWORK: ${{ inputs.deploy_network }}
+          SELECT_DATABASE: ${{ inputs.deploy_database }}
+          SELECT_INFRASTRUCTURE: ${{ inputs.deploy_infrastructure }}
+          SELECT_APPLICATION: ${{ inputs.deploy_application }}
+          GOOGLE_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
+          GOOGLE_LOCATION: ${{ vars.GOOGLE_CLOUD_LOCATION }}
+          WIF_SECRET_ARN: ${{ vars.GOOGLE_WIF_SECRET_ARN }}
+          NETWORK_EGRESS: ${{ vars.NETWORK_EGRESS }}
+          HTTPS_PROXY_URL: ${{ vars.BACKEND_HTTPS_PROXY }}
+          BASELINE_IMAGE_TAG: ${{ vars.BACKEND_IMAGE_TAG }}
+          BASELINE_DESIRED_COUNT: ${{ vars.BACKEND_DESIRED_COUNT }}
+        run: |
+          set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$ACCOUNT" == "$CDK_DEFAULT_ACCOUNT" ]] || { echo "::error::Unexpected AWS account."; exit 1; }
+          python -m pip install -r requirements.txt
+          stacks=()
+          if [[ "$SELECT_NETWORK" == true ]]; then stacks+=(ApnaSathiNetworkStack); fi
+          if [[ "$SELECT_DATABASE" == true ]]; then stacks+=(ApnaSathiDatabaseStack); fi
+          if [[ "$SELECT_INFRASTRUCTURE" == true ]]; then stacks+=(ApnaSathiInfrastructureStack); fi
+          if [[ "$SELECT_APPLICATION" == true ]]; then
+            if [[ -z "$BASELINE_IMAGE_TAG" || -z "$BASELINE_DESIRED_COUNT" ]]; then
+              echo "::error::Set the ApplicationStack baseline image tag and desired count explicitly."
+              exit 1
+            fi
+            stacks+=(ApnaSathiApplicationStack)
+          fi
+          context=(-c "networkEgress=${NETWORK_EGRESS:-none}")
+          if [[ -n "$GOOGLE_PROJECT" || -n "$WIF_SECRET_ARN" ]]; then
+            context+=(-c "googleCloudProject=$GOOGLE_PROJECT" -c "googleWifSecretArn=$WIF_SECRET_ARN" -c "googleCloudLocation=${GOOGLE_LOCATION:-global}")
+          fi
+          if [[ -n "$HTTPS_PROXY_URL" ]]; then context+=(-c "backendHttpsProxy=$HTTPS_PROXY_URL"); fi
+          if [[ -n "$BASELINE_IMAGE_TAG" ]]; then context+=(-c "backendImageTag=$BASELINE_IMAGE_TAG"); fi
+          if [[ -n "$BASELINE_DESIRED_COUNT" ]]; then context+=(-c "backendDesiredCount=$BASELINE_DESIRED_COUNT"); fi
+          npx --yes aws-cdk@2.1149.0 synth --no-lookups --quiet "${context[@]}"
+          npx --yes aws-cdk@2.1149.0 deploy --exclusively --require-approval never "${context[@]}" "${stacks[@]}"
+
+      - name: Authenticate with the backend deployment role
+        if: inputs.deploy_backend
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          unset-current-credentials: true
+
+      - name: Download and validate the service task definition
+        if: inputs.deploy_backend
+        id: current
+        run: |
+          set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          [[ "$ACCOUNT" == "$CDK_DEFAULT_ACCOUNT" ]] || { echo "::error::Unexpected AWS account."; exit 1; }
+          SERVICE=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0]' --output json)
+          CURRENT_TASK=$(jq -er '.taskDefinition' <<< "$SERVICE")
+          DESIRED=$(jq -er '[.desiredCount, 1] | max' <<< "$SERVICE")
+          echo "desired=$DESIRED" >> "$GITHUB_OUTPUT"
+          aws ecs describe-task-definition --task-definition "$CURRENT_TASK" --query taskDefinition --output json > task-definition.json
+          jq -e '
+            .family == "apnasathi-backend" and .runtimePlatform.cpuArchitecture == "ARM64"
+            and ([.containerDefinitions[] | select(.name == "backend")] | length == 1)
+            and ([.containerDefinitions[] | select(.name == "backend") | .secrets[]? | select(.name == "GOOGLE_WIF_CONFIG_JSON")] | length == 1)
+          ' task-definition.json > /dev/null
+
+      - uses: docker/setup-qemu-action@v3
+        if: inputs.deploy_backend
+
+      - uses: docker/setup-buildx-action@v3
+        if: inputs.deploy_backend
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        if: inputs.deploy_backend
         id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push immutable ARM64 image
+      - name: Build, smoke-test, and push immutable ARM64 image
+        if: inputs.deploy_backend
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          docker buildx build \
-            --platform linux/arm64 \
-            --push \
-            --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
-            .
+          IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker buildx build --platform linux/arm64 --load --tag "$IMAGE" .
+          test "$(docker image inspect "$IMAGE" --format '{{.Os}}/{{.Architecture}}')" = "linux/arm64"
+          NAME="apnasathi-smoke-$GITHUB_RUN_ID"
+          trap 'docker rm -f "$NAME" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "$NAME" --network none --platform linux/arm64 "$IMAGE"
+          for attempt in {1..60}; do
+            if docker exec "$NAME" python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).close()" 2>/dev/null; then
+              docker push "$IMAGE"
+              exit 0
+            fi
+            if [[ "$(docker inspect --format '{{.State.Running}}' "$NAME")" != true ]]; then break; fi
+            sleep 2
+          done
+          docker logs "$NAME"
+          exit 1
 
-      - name: Download current ECS task definition
-        run: |
-          set -euo pipefail
-          aws ecs describe-task-definition \
-            --task-definition apnasathi-backend \
-            --query taskDefinition \
-            --output json > task-definition.json
-
-      - name: Update task definition image
+      - name: Register and roll out the validated image
+        if: inputs.deploy_backend
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
+          DESIRED_COUNT: ${{ steps.current.outputs.desired }}
         run: |
           set -euo pipefail
           jq --arg image "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" '
-            .containerDefinitions |= map(
-              if .name == "backend" then .image = $image else . end
-            )
-            | del(
-              .taskDefinitionArn,
-              .revision,
-              .status,
-              .requiresAttributes,
-              .compatibilities,
-              .registeredAt,
-              .registeredBy
-            )
+            (.containerDefinitions[] | select(.name == "backend") | .image) = $image
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
           ' task-definition.json > new-task-definition.json
-
-      - name: Register new ECS task definition
-        id: task
-        run: |
-          set -euo pipefail
-          TASK_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://new-task-definition.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
-          echo "task_arn=$TASK_ARN" >> "$GITHUB_OUTPUT"
-
-      - name: Update ECS service
-        env:
-          TASK_ARN: ${{ steps.task.outputs.task_arn }}
-        run: |
-          set -euo pipefail
-          aws ecs update-service \
-            --cluster "$ECS_CLUSTER" \
-            --service "$ECS_SERVICE" \
-            --task-definition "$TASK_ARN" \
-            --desired-count 1
-
-      - name: Wait for ECS service stability
-        run: |
-          set -euo pipefail
-          aws ecs wait services-stable \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE"
-
-      - name: Confirm running task revision
-        env:
-          EXPECTED_TASK_DEFINITION: ${{ steps.task.outputs.task_arn }}
-        run: |
-          set -euo pipefail
-          ACTUAL_TASK_DEFINITION=$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --query 'services[0].taskDefinition' \
-            --output text)
-          if [[ "$ACTUAL_TASK_DEFINITION" != "$EXPECTED_TASK_DEFINITION" ]]; then
-            echo "::error::ECS service is not running the task definition registered by this deployment."
+          TASK_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$TASK_ARN" --desired-count "$DESIRED_COUNT" >/dev/null
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
+          ACTUAL=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].taskDefinition' --output text)
+          if [[ "$ACTUAL" != "$TASK_ARN" ]]; then
+            echo "::error::ECS stabilized on a different task definition, possibly after rollback."
             exit 1
           fi
-          echo "Deployment completed: $ACTUAL_TASK_DEFINITION"

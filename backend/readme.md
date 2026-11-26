@@ -61,8 +61,7 @@ Whisper base model once and includes the cached model in the image.
 The target group checks `/api/v1/health`. CDK keeps the service at zero tasks
 by default. After validating and publishing an immutable Linux ARM64 ECR tag,
 synthesize the first rollout with `-c backendDesiredCount=1` and
-`-c backendImageTag=<published-tag>`. Pass `-c certificateArn=<ACM-ARN>`
-with an issued certificate for the application hostname in ap-south-1.
+`-c backendImageTag=<published-tag>`. The HTTP ALB requires no ACM context.
 Confirm the selected AWS identity, existing stacks, ECR tag, ACM status, and
 Fargate quotas before authorizing a deployment.
 
@@ -99,3 +98,5 @@ The backend currently has no database client or query path. RDS provisioning
 and ECS secret injection do not establish application database readiness.
 Before exposing the audio upload API publicly, add authentication and rate
 limiting. Confirm the pinned RDS engine version is offered in the target region.
+
+See [AWS deployment and Vertex authentication](../docs/aws-deployment.md) for rollout and federation setup.

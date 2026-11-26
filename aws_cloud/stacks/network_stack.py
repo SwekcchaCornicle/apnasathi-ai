@@ -14,6 +14,8 @@ class NetworkStack(Stack):
         self,
         scope: Construct,
         construct_id: str,
+        *,
+        enable_nat: bool = False,
         **kwargs
     ) -> None:
 
@@ -173,7 +175,18 @@ class NetworkStack(Stack):
             ],
         )
 
-        # No NAT Gateway and no public internet route.
+        # Optional development egress. The existing S3 endpoint keeps its more specific route.
+        if enable_nat:
+            address = ec2.CfnEIP(self, "DevelopmentNatAddress", domain="vpc")
+            address.add_dependency(self.gateway_attachment)
+            nat = ec2.CfnNatGateway(
+                self, "DevelopmentNatGateway",
+                subnet_id=self.public_subnet_a.ref, allocation_id=address.attr_allocation_id,
+            )
+            ec2.CfnRoute(
+                self, "PrivateNatDefaultRoute", route_table_id=self.private_route_table.ref,
+                destination_cidr_block="0.0.0.0/0", nat_gateway_id=nat.ref,
+            )
 
         self.private_association_a = (
             ec2.CfnSubnetRouteTableAssociation(
@@ -200,22 +213,16 @@ class NetworkStack(Stack):
         self.alb_security_group = ec2.CfnSecurityGroup(
             self,
             "ALBSecurityGroup",
+            # GroupDescription is replacement-only. Preserve it while changing ingress.
             group_description="Public HTTPS and HTTP access for ALB",
             vpc_id=self.vpc.ref,
             security_group_ingress=[
                 ec2.CfnSecurityGroup.IngressProperty(
                     ip_protocol="tcp",
-                    from_port=443,
-                    to_port=443,
-                    cidr_ip="0.0.0.0/0",
-                    description="HTTPS traffic",
-                ),
-                ec2.CfnSecurityGroup.IngressProperty(
-                    ip_protocol="tcp",
                     from_port=80,
                     to_port=80,
                     cidr_ip="0.0.0.0/0",
-                    description="HTTP redirect traffic",
+                    description="HTTP traffic",
                 ),
             ],
             tags=[

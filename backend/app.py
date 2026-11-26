@@ -15,7 +15,7 @@ from agents.social_media import instagram_router, next_photo_step
 from agents.speech import generate_voice
 from agents.watch_show.troubleshoot import NEXT_STEP, guide_reply
 from llm_model.classify_intent_action import intent_action
-from llm_model.llm_model import extract_shopping_items, vertex_model
+from llm_model.llm_model import VertexUnavailable, extract_shopping_items, vertex_model
 from storage.s3_audio_storage import (
     AudioStorageError,
     MAX_AUDIO_REQUEST_BYTES,
@@ -86,7 +86,10 @@ def upload_audio(
 
     if isinstance(shopping_session, str):
         return handle_shopping_reply(shopping_session, shopping_language, transcription)
-    result = vertex_model(transcription)
+    try:
+        result = vertex_model(transcription)
+    except VertexUnavailable as error:
+        raise HTTPException(503, str(error)) from None
     if result is None:
         raise HTTPException(status_code=502, detail="The AI returned no structured response.")
 

@@ -1,17 +1,27 @@
-import os
 import logging
 
-from google import genai
-from google.genai import errors, types
+from google.genai import types
 from pydantic import BaseModel
 from .intent_classifier import IntentSchema
 from .prompt import intent_clasify_prompt as prompt
 
-client = genai.Client(
-    vertexai=True,
-    project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-    location=os.getenv("GOOGLE_CLOUD_LOCATION", "global")
-)
+from .vertex_auth import get_vertex_client
+
+logger = logging.getLogger(__name__)
+
+
+class VertexUnavailable(RuntimeError):
+    pass
+
+
+def generate_content(**request):
+    try:
+        return get_vertex_client().models.generate_content(**request)
+    except Exception as error:
+        # SDK exceptions can contain upstream bodies or identifying request metadata.
+        logger.warning("Vertex request failed (%s).", type(error).__name__)
+        raise VertexUnavailable("The AI service is temporarily unavailable.") from None
+
 
 def vertex_model(transcription):
     return classify_intent(transcription)
@@ -19,7 +29,7 @@ def vertex_model(transcription):
 
 def classify_intent(transcription):
     prompt_text = prompt(transcription)
-    response = client.models.generate_content(
+    response = generate_content(
         model="gemini-3.8-flash",
         contents=prompt_text,
         config=types.GenerateContentConfig(
@@ -38,7 +48,7 @@ class ShoppingItems(BaseModel):
 
 def extract_shopping_items(transcription: str) -> list[str]:
     try:
-        response = client.models.generate_content(
+        response = generate_content(
             model="gemini-3.1-flash-lite",
             contents=transcription,
             config=types.GenerateContentConfig(
@@ -59,7 +69,6 @@ def extract_shopping_items(transcription: str) -> list[str]:
                 thinking_config=types.ThinkingConfig(thinking_level="MINIMAL"),
             ),
         )
-    except errors.APIError:
-        logging.getLogger(__name__).warning("Vertex shopping-list extraction failed.")
+    except VertexUnavailable:
         return []
     return response.parsed.items if isinstance(response.parsed, ShoppingItems) else []

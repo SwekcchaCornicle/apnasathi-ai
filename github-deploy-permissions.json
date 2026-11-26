@@ -15,6 +15,7 @@
         "ecr:CompleteLayerUpload",
         "ecr:InitiateLayerUpload",
         "ecr:PutImage",
+        "ecr:BatchGetImage",
         "ecr:UploadLayerPart"
       ],
       "Resource": "arn:aws:ecr:ap-south-1:553607360155:repository/apnasathi-backend"

@@ -26,10 +26,13 @@ class ApplicationStack(Stack):
         backend_security_group: ec2.CfnSecurityGroup,
         vpc_id: str,
         database,
-        certificate_arn: str,
         audio_bucket: s3.IBucket,
         desired_count: int,
         image_tag: str,
+        google_project: str | None = None,
+        google_location: str = "global",
+        wif_secret_arn: str | None = None,
+        https_proxy: str | None = None,
         **kwargs,
     ):
         super().__init__(scope, construct_id, **kwargs)
@@ -126,6 +129,22 @@ class ApplicationStack(Stack):
         # 6. ECS Fargate Task Definition
         # -------------------------------------------------
 
+        google_environment = {}
+        google_secrets = []
+        if google_project and wif_secret_arn:
+            google_environment = {"GOOGLE_CLOUD_PROJECT": google_project, "GOOGLE_CLOUD_LOCATION": google_location}
+            self.execution_role.add_to_policy(iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"], resources=[wif_secret_arn],
+            ))
+            google_secrets.append(ecs.CfnTaskDefinition.SecretProperty(
+                name="GOOGLE_WIF_CONFIG_JSON", value_from=wif_secret_arn,
+            ))
+        if https_proxy:
+            google_environment.update(
+                HTTPS_PROXY=https_proxy,
+                NO_PROXY="localhost,127.0.0.1,169.254.170.2,169.254.170.23,169.254.169.254,.amazonaws.com",
+            )
+
         self.task_definition = ecs.CfnTaskDefinition(
             self,
             "BackendTaskDefinition",
@@ -145,6 +164,12 @@ class ApplicationStack(Stack):
                     name="backend",
                     image=f"{self.repository.repository_uri}:{image_tag}",
                     essential=True,
+                    stop_timeout=45,
+                    health_check=ecs.CfnTaskDefinition.HealthCheckProperty(
+                        command=["CMD", "python", "-c",
+                                 "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3).close()"],
+                        interval=30, timeout=5, retries=3, start_period=120,
+                    ),
                     port_mappings=[
                         ecs.CfnTaskDefinition.PortMappingProperty(
                             container_port=8000,
@@ -152,6 +177,8 @@ class ApplicationStack(Stack):
                         )
                     ],
                     environment=[
+                        *(ecs.CfnTaskDefinition.KeyValuePairProperty(name=name, value=value)
+                          for name, value in google_environment.items()),
                         ecs.CfnTaskDefinition.KeyValuePairProperty(
                             name="AUDIO_S3_BUCKET", value=audio_bucket.bucket_name,
                         ),
@@ -172,6 +199,7 @@ class ApplicationStack(Stack):
                         ),
                     ],
                     secrets=[
+                        *google_secrets,
                         ecs.CfnTaskDefinition.SecretProperty(
                             name="DATABASE_CREDENTIALS",
                             value_from=(
@@ -239,33 +267,8 @@ class ApplicationStack(Stack):
         )
 
         # -------------------------------------------------
-        # 9. HTTPS Listener
-        # -------------------------------------------------
-
-        self.https_listener = elbv2.CfnListener(
-            self,
-            "HttpsListener",
-            load_balancer_arn=self.load_balancer.ref,
-            port=443,
-            protocol="HTTPS",
-            certificates=[
-                elbv2.CfnListener.CertificateProperty(
-                    certificate_arn=certificate_arn
-                )
-            ],
-            ssl_policy="ELBSecurityPolicy-TLS13-1-2-2021-06",
-            default_actions=[
-                elbv2.CfnListener.ActionProperty(
-                    type="forward",
-                    target_group_arn=self.target_group.ref,
-                )
-            ],
-        )
-
-        # -------------------------------------------------
-        # 10. HTTP to HTTPS Redirect
-        # -------------------------------------------------
-
+        # 9. HTTP forwarding listener
+        # Keep the port 80 logical ID so CloudFormation can update it in place.
         self.http_listener = elbv2.CfnListener(
             self,
             "HttpRedirectListener",
@@ -274,14 +277,7 @@ class ApplicationStack(Stack):
             protocol="HTTP",
             default_actions=[
                 elbv2.CfnListener.ActionProperty(
-                    type="redirect",
-                    redirect_config=(
-                        elbv2.CfnListener.RedirectConfigProperty(
-                            protocol="HTTPS",
-                            port="443",
-                            status_code="HTTP_301",
-                        )
-                    ),
+                    type="forward", target_group_arn=self.target_group.ref,
                 )
             ],
         )
@@ -304,7 +300,7 @@ class ApplicationStack(Stack):
                     rollback=True,
                 )
             ),
-            health_check_grace_period_seconds=60,
+            health_check_grace_period_seconds=120,
             network_configuration=(
                 ecs.CfnService.NetworkConfigurationProperty(
                     awsvpc_configuration=(
@@ -330,7 +326,7 @@ class ApplicationStack(Stack):
             ],
         )
 
-        self.service.add_dependency(self.https_listener)
+        self.service.add_dependency(self.http_listener)
 
         # -------------------------------------------------
         # 12. Outputs
@@ -338,6 +334,7 @@ class ApplicationStack(Stack):
 
         from aws_cdk import CfnOutput
 
+        CfnOutput(self, "BackendTaskRoleArn", value=self.task_role.role_arn)
         CfnOutput(
             self,
             "ECRRepositoryUri",
