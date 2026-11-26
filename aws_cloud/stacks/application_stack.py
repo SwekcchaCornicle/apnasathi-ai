@@ -298,6 +298,12 @@ class ApplicationStack(Stack):
             task_definition=self.task_definition.ref,
             launch_type="FARGATE",
             desired_count=desired_count,
+            deployment_configuration=ecs.CfnService.DeploymentConfigurationProperty(
+                deployment_circuit_breaker=ecs.CfnService.DeploymentCircuitBreakerProperty(
+                    enable=True,
+                    rollback=True,
+                )
+            ),
             health_check_grace_period_seconds=60,
             network_configuration=(
                 ecs.CfnService.NetworkConfigurationProperty(
