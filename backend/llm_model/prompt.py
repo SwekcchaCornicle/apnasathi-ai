@@ -14,6 +14,7 @@ def intent_clasify_prompt(transcription):
         - GENERAL_CONVERSATION
         - UNKNOWN
     
+        For WATCH_SHOW, set entities.show_name to the requested title if provided.
         Identify the intent, application, entities and
         whether user confirmation is required.
     

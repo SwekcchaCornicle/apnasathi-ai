@@ -9,7 +9,7 @@ from faster_whisper import WhisperModel
 from llm_model.classify_intent_action import intent_action
 from llm_model.llm_model import vertex_model
 
-REPLY_INTENTS = {"GREETING", "GENERAL_QUESTION", "GENERAL_CONVERSATION"}
+REPLY_INTENTS = {"GREETING", "GENERAL_QUESTION", "GENERAL_CONVERSATION", "WATCH_SHOW"}
 
 router = APIRouter(tags=["health"])
 
@@ -37,6 +37,8 @@ def upload_audio(audio: UploadFile = File(...)):
         action = intent_action(result)
         payload["response"] = action["response"]
         payload["voice"] = action.get("voice")
+        if result.intent == "WATCH_SHOW":
+            payload["playback_status"] = action["playback_status"]
     return payload
 
 

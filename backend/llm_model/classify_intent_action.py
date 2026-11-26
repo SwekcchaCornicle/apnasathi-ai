@@ -1,4 +1,6 @@
 from agents.greeting import greeting
+
+
 def intent_action(intent):
     """
     This function takes the detected intent and performs the corresponding action.
@@ -21,11 +23,9 @@ def intent_action(intent):
             "entities": {}
         }
     elif intent.intent == "WATCH_SHOW":
-        return {
-            "response": f"Playing {intent.entities.get('show_name', 'the show')}.",
-            "requires_confirmation": True,
-            "entities": {"show_name": intent.entities.get("show_name")}
-        }
+        from agents.watch_show.watch_show import watch_show
+
+        return watch_show(intent.entities.get("show_name"), intent.response_language)
     elif intent.intent == "ORDER_GROCERIES":
         return {
             "response": f"Ordering groceries: {intent.entities.get('items', 'no items specified')}.",

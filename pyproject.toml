@@ -12,9 +12,11 @@ dependencies = [
     "fastapi>=0.165.0",
     "faster-whisper>=1.2.1",
     "google-genai>=3.6.1",
+    "playwright",
     "pydantic>=2.14.4",
     "python-dotenv>=1.2.4",
     "python-multipart>=0.0.34",
+    "requests>=2.34.2",
     "uvicorn>=0.54.0",
 ]
 
