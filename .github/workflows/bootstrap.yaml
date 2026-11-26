@@ -23,8 +23,8 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$GITHUB_REF" == refs/heads/main ]] || { echo "::error::Run from main."; exit 1; }
-          [[ -n "$CHECK_ROLE" && "$CHECK_ROLE" != "$DEPLOY_ROLE" ]] || {
-            echo "::error::Configure an infrastructure role distinct from AWS_ROLE_ARN."
+          [[ -n "$CHECK_ROLE" && "$CHECK_ROLE" == "$DEPLOY_ROLE" ]] || {
+            echo "::error::INFRASTRUCTURE_ROLE_ARN must match AWS_ROLE_ARN."
             exit 1
           }
 
