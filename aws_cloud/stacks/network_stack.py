@@ -2,6 +2,7 @@
 from aws_cdk import (
     Stack,
     CfnOutput,
+    CfnTag,
     aws_ec2 as ec2,
 )
 from constructs import Construct
@@ -29,9 +30,9 @@ class NetworkStack(Stack):
             enable_dns_support=True,
             enable_dns_hostnames=True,
             tags=[
-                ec2.CfnTag(key="Name", value="apnasathi-vpc"),
-                ec2.CfnTag(key="Project", value="ApnaSathiAI"),
-                ec2.CfnTag(key="Environment", value="dev"),
+                CfnTag(key="Name", value="apnasathi-vpc"),
+                CfnTag(key="Project", value="ApnaSathiAI"),
+                CfnTag(key="Environment", value="dev"),
             ],
         )
 
@@ -43,7 +44,7 @@ class NetworkStack(Stack):
             self,
             "ApnaSathiInternetGateway",
             tags=[
-                ec2.CfnTag(key="Name", value="apnasathi-igw"),
+                CfnTag(key="Name", value="apnasathi-igw"),
             ],
         )
 
@@ -66,7 +67,7 @@ class NetworkStack(Stack):
             availability_zone="ap-south-1a",
             map_public_ip_on_launch=True,
             tags=[
-                ec2.CfnTag(key="Name", value="apnasathi-public-a"),
+                CfnTag(key="Name", value="apnasathi-public-a"),
             ],
         )
 
@@ -78,7 +79,7 @@ class NetworkStack(Stack):
             availability_zone="ap-south-1b",
             map_public_ip_on_launch=True,
             tags=[
-                ec2.CfnTag(key="Name", value="apnasathi-public-b"),
+                CfnTag(key="Name", value="apnasathi-public-b"),
             ],
         )
 
@@ -94,7 +95,7 @@ class NetworkStack(Stack):
             availability_zone="ap-south-1a",
             map_public_ip_on_launch=False,
             tags=[
-                ec2.CfnTag(key="Name", value="apnasathi-private-a"),
+                CfnTag(key="Name", value="apnasathi-private-a"),
             ],
         )
 
@@ -106,7 +107,7 @@ class NetworkStack(Stack):
             availability_zone="ap-south-1b",
             map_public_ip_on_launch=False,
             tags=[
-                ec2.CfnTag(key="Name", value="apnasathi-private-b"),
+                CfnTag(key="Name", value="apnasathi-private-b"),
             ],
         )
 
@@ -119,7 +120,7 @@ class NetworkStack(Stack):
             "PublicRouteTable",
             vpc_id=self.vpc.ref,
             tags=[
-                ec2.CfnTag(
+                CfnTag(
                     key="Name",
                     value="apnasathi-public-rt",
                 ),
@@ -165,7 +166,7 @@ class NetworkStack(Stack):
             "PrivateRouteTable",
             vpc_id=self.vpc.ref,
             tags=[
-                ec2.CfnTag(
+                CfnTag(
                     key="Name",
                     value="apnasathi-private-rt",
                 ),
@@ -218,7 +219,7 @@ class NetworkStack(Stack):
                 ),
             ],
             tags=[
-                ec2.CfnTag(
+                CfnTag(
                     key="Name",
                     value="apnasathi-alb-sg",
                 ),
@@ -246,7 +247,7 @@ class NetworkStack(Stack):
                 ),
             ],
             tags=[
-                ec2.CfnTag(
+                CfnTag(
                     key="Name",
                     value="apnasathi-backend-sg",
                 ),
@@ -274,7 +275,7 @@ class NetworkStack(Stack):
                 ),
             ],
             tags=[
-                ec2.CfnTag(
+                CfnTag(
                     key="Name",
                     value="apnasathi-rds-sg",
                 ),
@@ -302,7 +303,7 @@ class NetworkStack(Stack):
                 ),
             ],
             tags=[
-                ec2.CfnTag(
+                CfnTag(
                     key="Name",
                     value="apnasathi-endpoint-sg",
                 ),

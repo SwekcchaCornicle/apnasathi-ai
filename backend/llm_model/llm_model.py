@@ -14,10 +14,7 @@ client = genai.Client(
 )
 
 def vertex_model(transcription):
-    print("Transcription received:", transcription)
-    intent = classify_intent(transcription)
-    print("Detected intent:", intent)
-    return intent
+    return classify_intent(transcription)
 
 
 def classify_intent(transcription):

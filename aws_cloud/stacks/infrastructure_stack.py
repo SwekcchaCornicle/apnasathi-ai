@@ -1,6 +1,8 @@
 from aws_cdk import (
     CfnOutput,
+    RemovalPolicy,
     Stack,
+    Tags,
     aws_apigateway as apigateway,
     aws_s3 as s3,
 )
@@ -21,6 +23,23 @@ class InfrastructureStack(Stack):
             "ApnaSathiBucket",
             enforce_ssl=True,
         )
+
+        self.audio_bucket = s3.Bucket(
+            self,
+            "AudioRecordingsBucket",
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
+            object_ownership=s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            enforce_ssl=True,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+        Tags.of(self.audio_bucket).add("Project", "ApnaSathiAI")
+        Tags.of(self.audio_bucket).add("Environment", "dev")
+        Tags.of(self.audio_bucket).add("Purpose", "AudioRecordings")
+        CfnOutput(self, "AudioBucketName", value=self.audio_bucket.bucket_name,
+                  export_name="ApnaSathiDevAudioBucketName")
+        CfnOutput(self, "AudioBucketArn", value=self.audio_bucket.bucket_arn,
+                  export_name="ApnaSathiDevAudioBucketArn")
 
         api = apigateway.RestApi(
             self,

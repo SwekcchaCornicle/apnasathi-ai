@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_logs as logs,
     aws_elasticloadbalancingv2 as elbv2,
     aws_ec2 as ec2,
+    aws_s3 as s3,
 )
 from constructs import Construct
 
@@ -23,8 +24,10 @@ class ApplicationStack(Stack):
         private_subnet_b: ec2.CfnSubnet,
         alb_security_group: ec2.CfnSecurityGroup,
         backend_security_group: ec2.CfnSecurityGroup,
+        vpc_id: str,
         database,
         certificate_arn: str,
+        audio_bucket: s3.IBucket,
         **kwargs,
     ):
         super().__init__(scope, construct_id, **kwargs)
@@ -112,8 +115,10 @@ class ApplicationStack(Stack):
             assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
         )
 
-        # Add application permissions here later:
-        # S3, SQS, SNS, Bedrock, etc.
+        self.task_role.add_to_policy(iam.PolicyStatement(
+            actions=["s3:PutObject", "s3:GetObject"],
+            resources=[audio_bucket.arn_for_objects("audio/*")],
+        ))
 
         # -------------------------------------------------
         # 6. ECS Fargate Task Definition
@@ -145,6 +150,12 @@ class ApplicationStack(Stack):
                         )
                     ],
                     environment=[
+                        ecs.CfnTaskDefinition.KeyValuePairProperty(
+                            name="AUDIO_S3_BUCKET", value=audio_bucket.bucket_name,
+                        ),
+                        ecs.CfnTaskDefinition.KeyValuePairProperty(
+                            name="AWS_REGION", value=self.region,
+                        ),
                         ecs.CfnTaskDefinition.KeyValuePairProperty(
                             name="DB_HOST",
                             value=database.database.attr_endpoint_address,
@@ -212,7 +223,7 @@ class ApplicationStack(Stack):
             port=8000,
             protocol="HTTP",
             target_type="ip",
-            vpc_id=vpc_id, # type: ignore
+            vpc_id=vpc_id,
             health_check_enabled=True,
             health_check_protocol="HTTP",
             health_check_path="/health",

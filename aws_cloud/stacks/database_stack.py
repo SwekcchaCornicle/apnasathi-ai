@@ -73,7 +73,7 @@ class DatabaseStack(Stack):
             manage_master_user_password=True,
 
             # Storage
-            allocated_storage=20,
+            allocated_storage="20",
             max_allocated_storage=100,
             storage_type="gp3",
             storage_encrypted=True,

@@ -50,6 +50,16 @@ database_stack = DatabaseStack(
 )
 
 # -------------------------------------------------
+# Stack 4: Shared Infrastructure
+# -------------------------------------------------
+
+infrastructure_stack = InfrastructureStack(
+    app,
+    "ApnaSathiInfrastructureStack",
+    env=env,
+)
+
+# -------------------------------------------------
 # Stack 3: Application
 # -------------------------------------------------
 
@@ -65,16 +75,7 @@ application_stack = ApplicationStack(
     vpc_id=network_stack.vpc.ref,
     database=database_stack,
     certificate_arn=certificate_arn,
-    env=env,
-)
-
-# -------------------------------------------------
-# Stack 4: Shared Infrastructure
-# -------------------------------------------------
-
-infrastructure_stack = InfrastructureStack(
-    app,
-    "ApnaSathiInfrastructureStack",
+    audio_bucket=infrastructure_stack.audio_bucket,
     env=env,
 )
 

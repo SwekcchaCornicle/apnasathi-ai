@@ -1,11 +1,11 @@
-import os
+import logging
 import re
 from dataclasses import asdict
 from pathlib import Path
 from shutil import copyfileobj
 from tempfile import TemporaryDirectory
-from uuid import uuid4
 
+from av.error import FFmpegError
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile
 from faster_whisper import WhisperModel
 from pydantic import TypeAdapter, ValidationError
@@ -16,14 +16,18 @@ from agents.speech import generate_voice
 from agents.watch_show.troubleshoot import NEXT_STEP, guide_reply
 from llm_model.classify_intent_action import intent_action
 from llm_model.llm_model import extract_shopping_items, vertex_model
+from storage.s3_audio_storage import (
+    AudioStorageError,
+    MAX_AUDIO_REQUEST_BYTES,
+    get_audio_storage,
+    validate_audio,
+)
 
 REPLY_INTENTS = {"GREETING", "GENERAL_QUESTION", "GENERAL_CONVERSATION", "WATCH_SHOW"}
 
 router = APIRouter(tags=["health"])
 
-UPLOAD_DIR = r"C:\Users\singh\OneDrive\Desktop\apnasathi-ai\audio_files"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
+logger = logging.getLogger(__name__)
 
 model = WhisperModel("base")
 
@@ -64,19 +68,22 @@ def handle_shopping_reply(
     }
 
 
-@router.post("/upload-audio")
+@router.post("/upload-audio", max_body_size=MAX_AUDIO_REQUEST_BYTES)
 def upload_audio(
     audio: UploadFile = File(...),
     shopping_session: str | None = Form(None, max_length=16000),
     shopping_language: str = Form("en"),
 ):
-    extension = Path(audio.filename or "").suffix
-    file_path = os.path.join(UPLOAD_DIR, f"{uuid4().hex}{extension}")
-    with open(file_path, "wb") as output:
-        copyfileobj(audio.file, output)
+    try:
+        storage = get_audio_storage()
+        key = storage.upload_audio(audio.file, audio.content_type)
+        with TemporaryDirectory(prefix="apnasathi-audio-") as directory:
+            file_path = Path(directory) / "recording"
+            storage.download_audio(key, file_path)
+            transcription = transcribe_audio(file_path)
+    except AudioStorageError as error:
+        raise HTTPException(error.status, str(error)) from None
 
-    segments, _ = model.transcribe(file_path)
-    transcription = " ".join(segment.text for segment in segments)
     if isinstance(shopping_session, str):
         return handle_shopping_reply(shopping_session, shopping_language, transcription)
     result = vertex_model(transcription)
@@ -109,17 +116,33 @@ def upload_audio(
     return payload
 
 
+def transcribe_audio(file_path: Path, *, strip: bool = False) -> str:
+    try:
+        segments, _ = model.transcribe(str(file_path))
+        # Whisper's segments are lazy, so decoding must finish before the temp file closes.
+        text = " ".join(segment.text.strip() if strip else segment.text for segment in segments)
+    except FFmpegError:
+        raise HTTPException(422, "The recording could not be decoded as audio.") from None
+    except Exception:
+        logger.warning("Whisper transcription failed.")
+        raise HTTPException(503, "Transcription is temporarily unavailable.") from None
+    return text.strip() if strip else text
+
+
 def transcribe_temporary_audio(audio: UploadFile) -> str:
-    # Short guide replies and captions go only to Whisper and are removed afterward.
-    with TemporaryDirectory() as directory:
+    # Guide replies and captions are transient and never become stored recordings.
+    try:
+        validate_audio(audio.file, audio.content_type)
+    except AudioStorageError as error:
+        raise HTTPException(error.status, str(error)) from None
+    with TemporaryDirectory(prefix="apnasathi-reply-") as directory:
         file_path = Path(directory) / "input"
         with file_path.open("wb") as output:
             copyfileobj(audio.file, output)
-        segments, _ = model.transcribe(str(file_path))
-        return " ".join(segment.text.strip() for segment in segments).strip()
+        return transcribe_audio(file_path, strip=True)
 
 
-@router.post("/instagram/caption")
+@router.post("/instagram/caption", max_body_size=MAX_AUDIO_REQUEST_BYTES)
 def transcribe_instagram_caption(audio: UploadFile = File(...)):
     text = transcribe_temporary_audio(audio)
     if not text:
@@ -127,7 +150,7 @@ def transcribe_instagram_caption(audio: UploadFile = File(...)):
     return {"text": text}
 
 
-@router.post("/watch-show/troubleshoot")
+@router.post("/watch-show/troubleshoot", max_body_size=MAX_AUDIO_REQUEST_BYTES)
 def troubleshoot_watch_show(
     step: str = Form(...),
     language: str = Form("en"),
