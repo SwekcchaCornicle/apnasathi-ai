@@ -46,6 +46,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "faster-whisper" },
     { name = "google-genai" },
+    { name = "piper-tts" },
     { name = "playwright" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -54,18 +55,13 @@ dependencies = [
     { name = "uvicorn" },
 ]
 
-[package.optional-dependencies]
-local-voice = [
-    { name = "piper-tts" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "av", specifier = "==18.1.0" },
     { name = "fastapi", specifier = ">=0.165.0" },
     { name = "faster-whisper", specifier = ">=1.2.1" },
     { name = "google-genai", specifier = ">=3.6.1" },
-    { name = "piper-tts", marker = "extra == 'local-voice'", specifier = "==1.8.0" },
+    { name = "piper-tts", specifier = "==1.8.0" },
     { name = "playwright" },
     { name = "pydantic", specifier = ">=2.14.4" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
@@ -73,7 +69,6 @@ requires-dist = [
     { name = "requests", specifier = ">=2.34.2" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
-provides-extras = ["local-voice"]
 
 [[package]]
 name = "av"

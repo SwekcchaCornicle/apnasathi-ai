@@ -1,11 +1,13 @@
 import logging
 import os
+from pathlib import Path
+from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 import requests
+from dotenv import dotenv_values
 
 from agents.speech import generate_voice
-from agents.watch_show.prime_video.prime_video import play_or_prompt_login
 
 logger = logging.getLogger(__name__)
 BASE_URL = "https://api.watchmode.com/v1"
@@ -18,7 +20,7 @@ def clean_streaming_platforms(
     platforms = []
     seen = set()
     for src in sources:
-        key = (src["name"], src["type"])
+        key = (src["name"], src["type"], src.get("web_url"))
         if key not in seen:
             seen.add(key)
             platforms.append({
@@ -35,7 +37,10 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
     """Finds streaming platforms for a given show name and country code (e.g., 'IN', 'US')."""
     api_key = os.getenv("WATCHMODE_API_KEY")
     if not api_key:
-        raise RuntimeError("WATCHMODE_API_KEY is missing.")
+        config = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
+        api_key = config.get("WATCHMODE_API_KEY") or config.get("watch_mode_api")
+    if not api_key:
+        raise RuntimeError("Set WATCHMODE_API_KEY or watch_mode_api in agents/.env.")
     headers = {"X-API-Key": api_key}
 
     # Step 1: Search for the show by name to get its Watchmode ID
@@ -83,40 +88,77 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
         ) from exc
 
 
-def get_status_message(status: str, language: str) -> str:
+def provider_key(name: str) -> str:
+    key = "".join(character for character in name.casefold() if character.isalnum())
+    return {
+        "amazonprime": "primevideo",
+        "amazonprimevideo": "primevideo",
+        "amazonvideo": "primevideo",
+        "disneyplushotstar": "hotstar",
+        "jiohotstar": "hotstar",
+        "appletvplus": "appletv",
+    }.get(key, key)
+
+
+def is_streaming_url(url: str) -> bool:
+    try:
+        parsed = urlsplit(url)
+        hostname = parsed.hostname or ""
+        if parsed.scheme != "https" or parsed.username is not None or "." not in hostname:
+            return False
+        if hostname.endswith((".localhost", ".local", ".internal")):
+            return False
+        try:
+            ip_address(hostname)
+        except ValueError:
+            return True
+    except ValueError:
+        pass
+    return False
+
+
+def watch_show(show_name, language, requested_platform=None):
+    status = "missing_title"
+    playback_url = None
+    playback_platform = None
+    if isinstance(show_name, str) and show_name.strip():
+        try:
+            sources = get_streaming_platforms(show_name.strip())
+            # Prefer included/free options before rental or purchase listings.
+            priority = {"sub": 0, "free": 0, "ads": 0, "rent": 1, "buy": 2}
+            for source in sorted(sources, key=lambda item: priority.get(item["access_type"], 3)):
+                platform = source["platform"]
+                url = source.get("web_url") or ""
+                if requested_platform and provider_key(platform) != provider_key(requested_platform):
+                    continue
+                if is_streaming_url(url):
+                    playback_url = url
+                    playback_platform = platform
+                    break
+            status = "ready" if playback_url else "source_unavailable"
+        except ValueError:
+            status = "source_unavailable"
+        except RuntimeError:
+            status = "failed"
+            logger.warning("Could not look up a streaming link.")
+
+    label = playback_platform or requested_platform
     messages = {
-        "playing": ("Video is playing in the other browser.", "वीडियो दूसरे ब्राउज़र में प्ले हो रहा है।"),
-        "login_required": ("You are not logged in.", "आप ऐप में लॉग इन नहीं हैं।"),
-        "failed": ("I couldn't start the video.", "वीडियो प्ले नहीं हो सका।"),
+        "ready": (f"The video is ready to open on {label}.", f"वीडियो {label} पर खोलने के लिए तैयार है।"),
+        "failed": ("I couldn't look up this video.", "इस वीडियो का लिंक खोजा नहीं जा सका।"),
+        "source_unavailable": (
+            f"I couldn't find a watch link on {label}." if label else "I couldn't find a watch link for this title.",
+            f"{label} पर वीडियो का लिंक नहीं मिला।" if label else "इस शीर्षक के लिए वीडियो का लिंक नहीं मिला।",
+        ),
         "missing_title": ("Which video would you like to watch?", "आप कौन सा वीडियो देखना चाहते हैं?"),
     }
-    english, hindi = messages[status]
-    return hindi if language.lower().split("-", 1)[0] == "hi" else english
-
-
-def watch_show(show_name, language):
-    status = "failed"
-    if not isinstance(show_name, str) or not show_name.strip():
-        status = "missing_title"
-    else:
-        try:
-            platforms = get_streaming_platforms(show_name.strip())
-            for platform in platforms:
-                url = platform.get("web_url") or ""
-                parsed = urlsplit(url)
-                host = parsed.hostname or ""
-                if parsed.scheme == "https" and (
-                    host in {"primevideo.com", "amazon.in", "amazon.com"}
-                    or host.endswith((".primevideo.com", ".amazon.in", ".amazon.com"))
-                ) and "prime" in platform["platform"].lower():
-                    status = play_or_prompt_login(url)
-                    break
-        except (RuntimeError, ValueError):
-            logger.warning("Could not look up a Prime Video link.")
-
-    message = get_status_message(status, language)
+    reply_language = "hi" if language.lower().split("-", 1)[0] == "hi" else "en"
+    message = messages[status][reply_language == "hi"]
     return {
         "response": message,
         "playback_status": status,
-        "voice": generate_voice(message, language),
+        "playback_url": playback_url,
+        "playback_platform": playback_platform,
+        "response_language": reply_language,
+        "voice": generate_voice(message, reply_language),
     }

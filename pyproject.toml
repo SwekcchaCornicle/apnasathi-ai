@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "piper-tts==1.8.0",
     "av==18.1.0",
     "fastapi>=0.165.0",
     "faster-whisper>=1.2.1",
@@ -22,11 +23,6 @@ dependencies = [
 
 [project.scripts]
 apnasathi-ai = "apnasathi_ai:main"
-
-[project.optional-dependencies]
-local-voice = [
-    "piper-tts==1.8.0",
-]
 
 [build-system]
 requires = ["uv_build>=0.13.8,<0.14.0"]

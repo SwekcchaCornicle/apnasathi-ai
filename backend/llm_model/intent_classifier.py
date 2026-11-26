@@ -17,7 +17,12 @@ class IntentSchema(BaseModel):
     ]
 
     application: Optional[str] = None
+    show_name: Optional[str] = Field(
+        default=None,
+        description="Requested series or film title for WATCH_SHOW, or null if no title is given",
+    )
 
+    shopping_items: list[str] = Field(default_factory=list, description="Items the user explicitly wants to buy")
     confidence: float = Field(
         ge=0,
         le=1

@@ -25,7 +25,11 @@ def intent_action(intent):
     elif intent.intent == "WATCH_SHOW":
         from agents.watch_show.watch_show import watch_show
 
-        return watch_show(intent.entities.get("show_name"), intent.response_language)
+        return watch_show(
+            intent.show_name or intent.entities.get("show_name"),
+            intent.response_language,
+            requested_platform=intent.application,
+        )
     elif intent.intent == "ORDER_GROCERIES":
         return {
             "response": f"Ordering groceries: {intent.entities.get('items', 'no items specified')}.",

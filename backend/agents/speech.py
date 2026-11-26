@@ -33,8 +33,10 @@ def generate_voice(text: str, language: str) -> dict:
 
     buffer = io.BytesIO()
     try:
-        with _synthesis_lock, wave.open(buffer, "wb") as output:
-            load_voice(model_path).synthesize_wav(text, output)
+        with _synthesis_lock:
+            voice = load_voice(model_path)
+            with wave.open(buffer, "wb") as output:
+                voice.synthesize_wav(text, output)
     except ImportError:
         return {"status": "unavailable", "reason": "piper_not_installed"}
     except Exception:

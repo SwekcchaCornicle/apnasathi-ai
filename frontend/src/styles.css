@@ -106,3 +106,27 @@ h1 em, .form-title em { color: #d3b28a; font-weight: 400; }
 .local-note { margin: 14px 0 0; color: #96968b; font-size: 9px; }
 .recorder-footer { display: flex; width: min(980px, 100%); justify-content: space-between; margin: 60px auto 0; border-top: 1px solid #e8e7df; padding-top: 18px; color: #a0a096; font-size: 9px; }.recorder-footer span { letter-spacing: 1px; }
 @media (max-width: 600px) { .recorder-page { padding: 0 18px 20px; }.recorder-header { min-height: 68px; }.recorder-content { margin-top: 49px; }.record-card { align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 15px; }.record-symbol { width: 38px; height: 38px; flex-basis: 38px; }.record-copy { align-self: center; }.record-button { width: 100%; }.recorder-footer { margin-top: 45px; }.recorder-footer span { font-size: 7px; } }
+
+.voice-title { margin: 0 0 18px; color: #2b3029; font: 400 clamp(32px, 5vw, 52px)/1.05 Georgia, serif; }
+.voice-session { overflow: hidden; border: 1px solid #dedfd4; border-radius: 20px; background: #f0f1e9; }
+.voice-transcript { min-height: 120px; max-height: 340px; overflow: auto; padding: 22px; }
+.voice-turn { display: grid; gap: 12px; margin-bottom: 12px; }
+.voice-bubble { justify-self: start; max-width: 85%; margin: 0; border-radius: 14px 14px 14px 4px; padding: 11px 15px; color: #28342a; background: #fffefa; font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.voice-bubble strong { display: block; margin-bottom: 3px; font-size: 11px; color: #496247; }
+.voice-bubble-user { justify-self: end; border-radius: 14px 14px 4px 14px; background: #dce7d9; }
+.voice-controls { display: grid; justify-items: center; gap: 9px; padding: 18px 16px 22px; background: #fffefa; }
+.voice-mic { display: grid; width: 70px; height: 70px; place-items: center; border: 0; border-radius: 50%; color: white; background: #405a46; cursor: pointer; }
+.voice-mic:focus-visible { outline: 2px solid #334e38; outline-offset: 5px; }
+.voice-mic-icon { position: relative; width: 13px; height: 22px; margin-top: -7px; border-radius: 8px; background: currentColor; }
+.voice-mic-icon::before { position: absolute; inset: 8px -5px -4px; border: 2px solid currentColor; border-top: 0; border-radius: 0 0 12px 12px; content: ''; }
+.voice-mic-icon::after { position: absolute; top: calc(100% + 4px); left: 5px; width: 3px; height: 5px; background: currentColor; content: ''; }
+.voice-mic-listening { background: #a34e46; animation: voice-pulse 1.3s infinite; }
+.voice-mic-speaking { animation: voice-pulse 1.6s infinite; }
+.voice-mic-thinking { opacity: .65; cursor: wait; }
+.voice-state { margin: 0; color: #34473a; font-size: 14px; font-weight: 600; }
+.voice-hint { color: #546257; font-size: 12px; }
+.voice-controls audio { width: min(100%, 300px); height: 38px; }
+@keyframes voice-pulse { 50% { box-shadow: 0 0 0 10px #76886f38; } }
+@media (prefers-reduced-motion: reduce) { .voice-mic { animation: none; } }
+.voice-link { display: block; width: fit-content; margin-top: 8px; color: #31543a; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.voice-photo { display: block; width: 230px; max-width: 100%; height: 160px; border-radius: 8px; object-fit: contain; background: #fffefa; }
