@@ -2,37 +2,46 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ECRPush",
+      "Sid": "ECRAuthentication",
       "Effect": "Allow",
-      "Action": [
-        "ecr:GetAuthorizationToken"
-      ],
+      "Action": "ecr:GetAuthorizationToken",
       "Resource": "*"
     },
     {
-      "Sid": "ECRRepositoryPush",
+      "Sid": "PushOnlyApnaSathiImage",
       "Effect": "Allow",
       "Action": [
         "ecr:BatchCheckLayerAvailability",
         "ecr:CompleteLayerUpload",
         "ecr:InitiateLayerUpload",
         "ecr:PutImage",
-        "ecr:UploadLayerPart",
-        "ecr:BatchGetImage"
+        "ecr:UploadLayerPart"
       ],
       "Resource": "arn:aws:ecr:ap-south-1:553607360155:repository/apnasathi-backend"
     },
     {
-      "Sid": "ECSApplicationDeployment",
+      "Sid": "RegisterAndReadApnaSathiTaskDefinition",
       "Effect": "Allow",
       "Action": [
         "ecs:RegisterTaskDefinition",
-        "ecs:DescribeTaskDefinition",
-        "ecs:DescribeServices",
-        "ecs:UpdateService",
-        "ecs:DescribeClusters"
+        "ecs:DescribeTaskDefinition"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "ManageOnlyApnaSathiECSService",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeServices",
+        "ecs:UpdateService"
+      ],
+      "Resource": "arn:aws:ecs:ap-south-1:553607360155:service/apnasathi-dev-cluster/apnasathi-backend-service"
+    },
+    {
+      "Sid": "ReadOnlyApnaSathiCluster",
+      "Effect": "Allow",
+      "Action": "ecs:DescribeClusters",
+      "Resource": "arn:aws:ecs:ap-south-1:553607360155:cluster/apnasathi-dev-cluster"
     },
     {
       "Sid": "PassOnlyApnaSathiTaskRoles",
