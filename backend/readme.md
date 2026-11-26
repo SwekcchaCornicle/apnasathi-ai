@@ -56,11 +56,46 @@ In a second terminal, run `curl.exe --fail http://127.0.0.1:8000/api/v1/health`.
 The smoke test does not access AWS. The container build downloads the public
 Whisper base model once and includes the cached model in the image.
 
-## Deployment prerequisites
+## Deployment preflight
 
-The existing private ECS subnets share the route table attached to the S3
-gateway endpoint. The endpoint covers S3 traffic only. The current private
-subnets have no external egress for Vertex AI or other external integrations.
-The ALB target group also checks `/health`, while the API exposes
-`/api/v1/health`. Resolve those existing deployment issues and put authentication
-and rate limiting in front of the upload API before making it public.
+The target group checks `/api/v1/health`. CDK keeps the service at zero tasks
+by default. After validating and publishing an immutable Linux ARM64 ECR tag,
+synthesize the first rollout with `-c backendDesiredCount=1` and
+`-c backendImageTag=<published-tag>`. Pass `-c certificateArn=<ACM-ARN>`
+with an issued certificate for the application hostname in ap-south-1.
+Confirm the selected AWS identity, existing stacks, ECR tag, ACM status, and
+Fargate quotas before authorizing a deployment.
+
+Check the local image after the build:
+
+```powershell
+docker image inspect apnasathi-backend:local --format '{{.Os}}/{{.Architecture}}'
+```
+
+Expect `linux/arm64`. A successful health check verifies container startup
+but not calls to S3, Vertex, or Meta.
+
+### Outbound access without a NAT Gateway
+
+Keep ECS and RDS private. The gateway endpoint continues to handle S3, and
+the existing interface endpoints handle AWS service traffic. For the external
+HTTPS APIs, use a forward proxy with an Internet route in the public subnets.
+Restrict proxy ingress to the ECS security group and allow only the required
+HTTPS CONNECT destinations for Google, Meta, and enabled integrations such
+as Watchmode. Use TLS passthrough, configure `HTTPS_PROXY` for clients that
+support it, and keep AWS endpoint traffic and ECS task credentials metadata
+out of the proxy using `NO_PROXY`. Verify each client from a task before
+rollout. A single proxy is a development option. For production, use redundant
+proxies across both AZs. No proxy or route change is included here.
+
+For Google, configure Application Default Credentials with Workload Identity
+Federation scoped to this ECS task role and a minimally privileged Google
+identity. The ECS integration must use task role credentials, not an EC2 IMDS
+configuration. Validate the AWS credential supplier and the Google STS and
+Vertex paths together. `GOOGLE_CLOUD_PROJECT` names a project but does not
+authenticate the task.
+
+The backend currently has no database client or query path. RDS provisioning
+and ECS secret injection do not establish application database readiness.
+Before exposing the audio upload API publicly, add authentication and rate
+limiting. Confirm the pinned RDS engine version is offered in the target region.

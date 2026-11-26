@@ -15,7 +15,11 @@ class AudioInfrastructureTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # A synthetic account and certificate let CloudFormation templates synthesize offline.
-        context = {"certificateArn": "arn:aws:acm:ap-south-1:111111111111:certificate/00000000-0000-0000-0000-000000000000"}
+        context = {
+            "certificateArn": "arn:aws:acm:ap-south-1:111111111111:certificate/00000000-0000-0000-0000-000000000000",
+            "backendDesiredCount": "1",
+            "backendImageTag": "preflight-arm64",
+        }
         from aws_cdk import App
 
         with TemporaryDirectory() as directory, patch.dict(os.environ, {"CDK_DEFAULT_ACCOUNT": "111111111111"}):
@@ -99,3 +103,12 @@ class AudioInfrastructureTests(unittest.TestCase):
         }
         self.assertEqual(private_subnets, {"PrivateSubnetA", "PrivateSubnetB"})
         self.assertFalse(self.resources("Network", "AWS::EC2::NatGateway"))
+
+    def test_first_service_rollout_configuration(self):
+        service = next(iter(self.resources("Application", "AWS::ECS::Service").values()))["Properties"]
+        self.assertEqual(service["DesiredCount"], 1)
+        target = next(iter(self.resources("Application", "AWS::ElasticLoadBalancingV2::TargetGroup").values()))
+        self.assertEqual(target["Properties"]["HealthCheckPath"], "/api/v1/health")
+        task = next(iter(self.resources("Application", "AWS::ECS::TaskDefinition").values()))["Properties"]
+        self.assertEqual(task["RuntimePlatform"]["CpuArchitecture"], "ARM64")
+        self.assertIn(":preflight-arm64", json.dumps(task["ContainerDefinitions"][0]["Image"]))

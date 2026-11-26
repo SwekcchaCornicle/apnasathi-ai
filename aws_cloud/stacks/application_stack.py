@@ -28,6 +28,8 @@ class ApplicationStack(Stack):
         database,
         certificate_arn: str,
         audio_bucket: s3.IBucket,
+        desired_count: int,
+        image_tag: str,
         **kwargs,
     ):
         super().__init__(scope, construct_id, **kwargs)
@@ -141,7 +143,7 @@ class ApplicationStack(Stack):
             container_definitions=[
                 ecs.CfnTaskDefinition.ContainerDefinitionProperty(
                     name="backend",
-                    image=f"{self.repository.repository_uri}:v1",
+                    image=f"{self.repository.repository_uri}:{image_tag}",
                     essential=True,
                     port_mappings=[
                         ecs.CfnTaskDefinition.PortMappingProperty(
@@ -226,7 +228,7 @@ class ApplicationStack(Stack):
             vpc_id=vpc_id,
             health_check_enabled=True,
             health_check_protocol="HTTP",
-            health_check_path="/health",
+            health_check_path="/api/v1/health",
             health_check_port="traffic-port",
             matcher=elbv2.CfnTargetGroup.MatcherProperty(
                 http_code="200-399"
@@ -295,7 +297,7 @@ class ApplicationStack(Stack):
             cluster=self.cluster.ref,
             task_definition=self.task_definition.ref,
             launch_type="FARGATE",
-            desired_count=0,
+            desired_count=desired_count,
             health_check_grace_period_seconds=60,
             network_configuration=(
                 ecs.CfnService.NetworkConfigurationProperty(

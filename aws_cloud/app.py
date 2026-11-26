@@ -1,5 +1,6 @@
 
 import os
+import re
 
 import aws_cdk as cdk
 
@@ -20,11 +21,22 @@ env = cdk.Environment(
 # ACM certificate ARN must be supplied through CDK context.
 certificate_arn = app.node.try_get_context("certificateArn")
 
-if not certificate_arn:
-    raise ValueError(
-        "Missing ACM certificate ARN. "
-        "Pass it using -c certificateArn=YOUR_CERTIFICATE_ARN"
-    )
+if not isinstance(certificate_arn, str) or not re.fullmatch(
+    r"arn:aws:acm:ap-south-1:[0-9]{12}:certificate/[0-9a-fA-F-]{36}", certificate_arn
+):
+    raise ValueError("Pass a Mumbai ACM certificate ARN using -c certificateArn=YOUR_CERTIFICATE_ARN")
+
+# Keep infrastructure-only development synths safe until an image has been published.
+desired_count = str(app.node.try_get_context("backendDesiredCount") or "0")
+if not re.fullmatch(r"[0-9]+", desired_count):
+    raise ValueError("backendDesiredCount must be a non-negative integer.")
+image_tag = app.node.try_get_context("backendImageTag")
+if image_tag is None:
+    if int(desired_count) > 0:
+        raise ValueError("Set backendImageTag to the published ECR image tag before starting ECS.")
+    image_tag = "v1"
+if not isinstance(image_tag, str) or not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", image_tag):
+    raise ValueError("backendImageTag must be a valid Docker image tag.")
 
 # -------------------------------------------------
 # Stack 1: Network
@@ -76,6 +88,8 @@ application_stack = ApplicationStack(
     database=database_stack,
     certificate_arn=certificate_arn,
     audio_bucket=infrastructure_stack.audio_bucket,
+    desired_count=int(desired_count),
+    image_tag=image_tag,
     env=env,
 )
 
