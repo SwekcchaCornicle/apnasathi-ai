@@ -11,6 +11,7 @@ from faster_whisper import WhisperModel
 from pydantic import TypeAdapter, ValidationError
 
 from api.auth import router as auth_router
+from api.knowledge import router as knowledge_router
 from agents.shoaping import PROMPTS, STORES, ShoppingSession, shopping_message, shopping_reply, start_shopping
 from agents.social_media import instagram_router, next_photo_step
 from agents.speech import generate_voice
@@ -184,5 +185,6 @@ app = FastAPI(
 )
 
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(knowledge_router, prefix="/api/v1")
 app.include_router(router, prefix="/api/v1")
 app.include_router(instagram_router, prefix="/api/v1")
