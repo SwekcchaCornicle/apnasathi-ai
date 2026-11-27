@@ -124,7 +124,7 @@ Create a local PostgreSQL database with pgvector installed, copy
 ```powershell
 $env:DATABASE_URL = "postgresql+psycopg://apnasathi:password@localhost:5432/apnasathi"
 $env:DB_SSL = "false"
-uv run alembic -c backend/alembic.ini upgrade head
+uv run --no-sync alembic -c backend/alembic.ini upgrade head
 ```
 
 For ECS, the task already receives `DB_HOST`, `DB_PORT`, `DB_NAME`, and the
