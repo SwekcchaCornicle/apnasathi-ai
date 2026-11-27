@@ -155,3 +155,58 @@ Run the backend tests after installing dependencies:
 ```powershell
 uv run --no-sync python -m unittest discover -s backend/tests -v
 ```
+
+
+## Development authentication: Amazon Cognito
+
+This development setup uses the Cognito User Pool in `ap-south-1`.
+
+Frontend `.env.local`:
+
+```dotenv
+VITE_COGNITO_REGION=ap-south-1
+VITE_COGNITO_USER_POOL_ID=ap-south-1_qxfax5y4B
+VITE_COGNITO_CLIENT_ID=3o9dcghf8vagog0c24jpih5l8r
+VITE_API_BASE_URL=/api/v1
+```
+
+Backend `.env`:
+
+```dotenv
+COGNITO_REGION=ap-south-1
+COGNITO_USER_POOL_ID=ap-south-1_qxfax5y4B
+COGNITO_CLIENT_ID=3o9dcghf8vagog0c24jpih5l8r
+```
+
+The frontend uses the AWS Cognito Identity Provider SDK directly for email/password
+sign-up, email confirmation, sign-in, forgot-password and password reset. It sends
+the resulting Cognito ID token to `POST /api/v1/auth/cognito`. FastAPI verifies the
+JWT signature against the User Pool JWKS, issuer, app-client audience, token_use,
+expiry and verified email before creating/updating the local account.
+
+The app client must be a **public client with no client secret**. Enable the
+`USER_PASSWORD_AUTH` authentication flow (AWS console app client authentication
+flows / ALLOW_USER_PASSWORD_AUTH) because the development frontend calls
+`InitiateAuth` with `USER_PASSWORD_AUTH`. Keep self-registration and email
+verification enabled in the User Pool. SMS/MFA is not required for this dev setup.
+
+Do not put AWS access keys or a client secret in the frontend. The Cognito app
+client ID and User Pool ID are identifiers, not secrets. Configure real values in
+local `.env.local` / `.env` files and never commit credentials.
+
+Install updated dependencies after pulling:
+
+```bash
+# frontend
+cd frontend
+npm install
+npm run dev
+
+# backend (from repository root; use your existing uv workflow)
+uv sync
+```
+
+Legacy Google verifier files may remain for reference, but the active auth router
+and protected-route dependency now use Cognito. Existing Google-only accounts are
+not automatically linked to Cognito accounts; this is a development migration
+and account linking should be designed before production.
