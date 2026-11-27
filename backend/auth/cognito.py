@@ -15,6 +15,7 @@ USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "ap-south-1_qxfax5y4B")
 APP_CLIENT_ID = os.getenv("COGNITO_CLIENT_ID", "").strip()
 ISSUER = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}"
 JWKS_URL = f"{ISSUER}/.well-known/jwks.json"
+CLOCK_SKEW_SECONDS = 5
 
 @lru_cache(maxsize=1)
 def _jwks_client() -> PyJWKClient:
@@ -33,6 +34,7 @@ def verify_cognito_id_token(encoded_token: str) -> dict[str, Any]:
             algorithms=["RS256"],
             audience=APP_CLIENT_ID,
             issuer=ISSUER,
+            leeway=CLOCK_SKEW_SECONDS,
             options={"require": ["exp", "iat", "sub", "iss", "aud"]},
         )
     except jwt.PyJWKClientConnectionError:

@@ -41,6 +41,14 @@ function summaryFor(messages) {
   return first.length > 86 ? `${first.slice(0, 83)}…` : first
 }
 
+function speakReply(text, language) {
+  if (!text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return
+  const utterance = new SpeechSynthesisUtterance(text)
+  utterance.lang = language === 'hi' ? 'hi-IN' : 'en-IN'
+  window.speechSynthesis.cancel()
+  window.speechSynthesis.speak(utterance)
+}
+
 export default function ChatWorkspace({ onSignOut, token, language }) {
   const [conversations, setConversations] = useState([])
   const [messageList, setMessageList] = useState([])
@@ -168,7 +176,9 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
       setMessageList((current) => current.filter((item) => !String(item.id).startsWith('pending-')))
       setDraft(content)
       setNotice(error.message)
-    } finally { setBusy(false) }
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function guideVideo(platform, step, reply, audio) {
@@ -183,6 +193,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
     try {
       const result = await request('/watch-show/troubleshoot', { method: 'POST', body })
       setVideoGuide({ ...result, platform })
+      speakReply(result.response, language)
     } catch (error) { setNotice(error.message) }
     finally { setBusy(false) }
   }
@@ -234,9 +245,13 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
             { id: result.user_message_id, role: 'user', content: result.transcription || '🎙️ Voice message', language: result.language },
             { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback },
           ])
+          if (!mountedRef.current) return
+          speakReply(result.response, result.language || language)
           void refreshConversations().catch(() => {})
         } catch (error) { setNotice(error.message) }
-        finally { setBusy(false) }
+        finally {
+          setBusy(false)
+        }
       }
       recorder.start()
       setRecording(true)
@@ -253,6 +268,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      window.speechSynthesis?.cancel()
       const recorder = recorderRef.current
       if (recorder) {
         recorder.onstop = null
@@ -314,9 +330,11 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                   )}
                   {message.shopping && message.id === messageList.at(-1)?.id && !message.shopping.done && (
                     <div className="suggestion-row">
-                      {(message.shopping.actions || (message.shopping.action ? [message.shopping.action] : [])).map((item) => (
-                        <a className="voice-link" key={item.url} href={item.url} target="_blank" rel="noopener noreferrer">{item.label}</a>
-                      ))}
+                      {message.shopping.session?.items?.length > 0 && (
+                        <ul aria-label="Shopping list">
+                          {message.shopping.session.items.map((item) => <li key={item}>{item}</li>)}
+                        </ul>
+                      )}
                       {message.shopping.choices.map((choice) => (
                         <button key={choice} type="button" onClick={() => void sendText(choice)} disabled={busy || recording}>{choice}</button>
                       ))}

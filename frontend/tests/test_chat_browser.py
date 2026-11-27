@@ -126,7 +126,7 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
                 intent, answer = "POST_PHOTO", "Please attach a photo"
             elif text == "Shop for fixture groceries":
                 intent, answer = "ORDER_GROCERIES", "Choose a store"
-                extra["shopping"] = {"choices": ["Blinkit", "Amazon"], "done": False}
+                extra["shopping"] = {"choices": ["Blinkit", "Amazon"], "done": False, "actions": [{"url": "https://blinkit.com/", "label": "Open Blinkit"}], "session": {"items": ["bread", "1 packet of milk", "2 kg potato"]}}
             elif text == "Cancel":
                 intent, answer = "ORDER_GROCERIES", "Shopping finished"
                 extra["shopping"] = {"choices": [], "done": True}
@@ -180,6 +180,15 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
         page.get_by_role("button", name="New conversation Fixture question", exact=False).click()
         expect(page.get_by_text("Fixture response", exact=True)).to_be_visible()
         page.evaluate("""() => {
+            window.qaSpeech = [];
+            window.qaPlayback = [];
+            window.speechSynthesis.speak = (utterance) => window.qaSpeech.push(utterance.text);
+            window.open = () => ({
+              document: { body: {} },
+              closed: false,
+              close() { this.closed = true; },
+              location: { replace: (url) => window.qaPlayback.push(url) },
+            });
             window.qaStoppedTracks = 0;
             window.qaAllowMic = false;
             navigator.mediaDevices.getUserMedia = async () => {
@@ -206,6 +215,7 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
         expect(page.get_by_text("Voice fixture question", exact=True)).to_be_visible()
         expect(page.get_by_text("Voice fixture response", exact=True)).to_be_visible()
         assert page.evaluate("window.qaStoppedTracks") == 1
+        assert page.evaluate("window.qaSpeech") == ["Voice fixture response"]
         if width == 1280:
             def send(text):
                 composer.fill(text)
@@ -213,11 +223,14 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
 
             send("Shop for fixture groceries")
             expect(page.get_by_role("button", name="Blinkit")).to_be_visible()
+            expect(page.get_by_role("list", name="Shopping list").get_by_role("listitem")).to_have_count(3)
+            expect(page.get_by_role("link", name="Open Blinkit")).to_have_count(0)
             page.get_by_role("button", name="End shopping").click()
             expect(page.get_by_text("Shopping finished", exact=True)).to_be_visible()
 
             send("Watch a fixture video")
             expect(page.get_by_role("link", name="Open in Netflix")).to_have_attribute("href", "https://www.netflix.com/")
+            assert page.evaluate("window.qaPlayback") == []
             page.get_by_role("button", name="Troubleshoot playback").click()
             expect(page.get_by_text("Is the video playing?", exact=True)).to_be_visible()
             page.get_by_role("button", name="Yes").click()

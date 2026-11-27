@@ -30,6 +30,8 @@ def signing_key():
     ({"token_use": "access"}, 401),
     ({"email_verified": False}, 403),
     ({"exp": 1}, 401),
+    ({"iat": timedelta(seconds=2)}, 200),
+    ({"iat": timedelta(minutes=1)}, 401),
 ])
 def test_cognito_claims_are_verified(signing_key, changes, status):
     now = datetime.now(timezone.utc)
@@ -38,7 +40,8 @@ def test_cognito_claims_are_verified(signing_key, changes, status):
         "exp": now + timedelta(minutes=5), "iat": now, "token_use": "id",
         "email": "qa@example.test", "email_verified": True,
     }
-    token = jwt.encode(claims | changes, signing_key, algorithm="RS256")
+    timed_changes = {key: now + value if isinstance(value, timedelta) else value for key, value in changes.items()}
+    token = jwt.encode(claims | timed_changes, signing_key, algorithm="RS256")
     with patch.object(cognito, "APP_CLIENT_ID", "test-public-client"), patch.object(cognito, "_jwks_client") as factory:
         factory.return_value.get_signing_key_from_jwt.return_value = SimpleNamespace(key=signing_key.public_key())
         if status == 200:

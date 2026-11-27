@@ -60,6 +60,27 @@ class AssistantChatResponse(BaseModel):
     playback: dict | None = None
 
 
+def _shopping_in_chat(session: ShoppingSession) -> ShoppingSession:
+    if session.step in {"login", "offer_login", "sign_in", "sign_in_self"}:
+        return replace(session, step="item" if session.items else "items")
+    if session.step in {"offer_checkout", "checkout_cart", "checkout_address", "checkout_payment", "payment_ready"}:
+        return replace(session, step="done")
+    return session
+
+
+def _shopping_chat_payload(session: ShoppingSession) -> dict:
+    message = shopping_message(session)
+    if session.step == "item":
+        message["response"] = f"Your list includes {session.items[session.item_index]}. Is that correct? Say “change items to…” to update the list."
+    elif session.step == "cart":
+        message["response"] = "Is your shopping list complete?"
+    elif session.step == "done":
+        message["response"] = "Your shopping list is saved in this chat."
+    message.pop("action", None)
+    message.pop("actions", None)
+    return {**message, "session": asdict(session)}
+
+
 def _chat_conversation(db: Session, user_id: UUID, conversation_id: UUID) -> Conversation:
     conversation = db.scalar(select(Conversation).where(
         Conversation.id == conversation_id,
@@ -152,12 +173,12 @@ def assistant_chat(
         source = "saved_history"
         intent = "ORDER_GROCERIES"
     elif shopping_active:
-        session = SHOPPING_STATE.validate_python(prior_shopping["session"])
+        session = _shopping_in_chat(SHOPPING_STATE.validate_python(prior_shopping["session"]))
         correction = CHANGE_ITEMS.match(question)
         if correction:
             session = replace(session, step="items", item_index=0)
-        session = shopping_reply(session, correction.group(1) if correction else question)
-        shopping = {**shopping_message(session), "session": asdict(session)}
+        session = _shopping_in_chat(shopping_reply(session, correction.group(1) if correction else question))
+        shopping = _shopping_chat_payload(session)
         if session.store == "Blinkit" and session.items != tuple(prior_shopping["session"]["items"]):
             user_message.metadata_json = {"shopping_items": list(session.items), "shopping_store": session.store}
         response_text = shopping["response"]
@@ -218,8 +239,8 @@ def assistant_chat(
         if intent == "ORDER_GROCERIES":
             raw_items = classified.entities.get("items")
             items = tuple(item for item in raw_items if isinstance(item, str) and item.strip()) if isinstance(raw_items, list) else ()
-            session = start_shopping(f"{classified.application or ''} {question}", items)
-            shopping = {**shopping_message(session), "session": asdict(session)}
+            session = _shopping_in_chat(start_shopping(f"{classified.application or ''} {question}", items))
+            shopping = _shopping_chat_payload(session)
             if session.items:
                 user_message.metadata_json = {"shopping_items": list(session.items), "shopping_store": session.store}
         language = classified.response_language if classified.response_language in {"en", "hi"} else language

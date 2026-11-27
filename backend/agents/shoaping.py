@@ -92,16 +92,17 @@ def shopping_reply(
             items = _items(extract_items(answer))
             return replace(session, step="item", items=items, item_index=0) if items else session
         # Voice transcripts often start with a hesitation and a request phrase.
-        spoken_items = re.sub(r"^(?:(?:h+m+|u+m+|u+h+|okay|ok|please|हम्म|उम्)[, .]+)+", "", answer.strip(), flags=re.IGNORECASE)
+        spoken_items = re.sub(r"^(?:(?:h+m+|u+m+|u+h+|yes|yeah|yep|haan|okay|ok|please|हाँ|हां|जी|हम्म|उम्)[, .।]+)+", "", answer.strip(), flags=re.IGNORECASE)
         spoken_items = re.sub(
-            r"^(?:(?:i (?:want|need|would like) to )?(?:buy|order|get)\s+|मुझे\s+)",
+            r"^(?:(?:i (?:want|need|would like) to )?(?:buy|order|get)\s+(?:(?:a|an|some)\s+)?|मुझे\s+)",
             "", spoken_items, flags=re.IGNORECASE,
         )
         spoken_items = re.sub(r"\s+(?:please|चाहिए|खरीदना है)[.!?।]*$", "", spoken_items, flags=re.IGNORECASE)
         items = _items(part.strip(" .!?।") for part in re.split(
             r"\s*(?:[,;\n]|\band\b|\bऔर\b)\s*", spoken_items, flags=re.IGNORECASE,
         ))
-        if items and _normalized(answer) not in YES | NO:
+        items = tuple(item for item in items if _normalized(item) not in YES | NO)
+        if items:
             return replace(session, step="item", items=items, item_index=0)
         return session
 
