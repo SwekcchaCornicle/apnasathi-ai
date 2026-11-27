@@ -1,13 +1,9 @@
-import { useEffect, useState } from 'react'
-import AudioRecorder from './AudioRecorder.jsx'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import ChatWorkspace from './ChatWorkspace.jsx'
 
 const languages = [
-  { name: 'English', native: 'English', region: 'A little bit of everywhere', mark: 'EN' },
-  { name: 'Hindi', native: 'हिन्दी', region: 'Across North India', mark: 'हि' },
-  { name: 'Bengali', native: 'বাংলা', region: 'West Bengal & beyond', mark: 'বা' },
-  { name: 'Tamil', native: 'தமிழ்', region: 'Tamil Nadu & beyond', mark: 'த' },
-  { name: 'Telugu', native: 'తెలుగు', region: 'Andhra Pradesh & Telangana', mark: 'తె' },
-  { name: 'Marathi', native: 'मराठी', region: 'Maharashtra & beyond', mark: 'म' },
+  { name: 'English', native: 'English', region: 'Available now', mark: 'EN' },
+  { name: 'Hindi', native: 'हिन्दी', region: 'अब उपलब्ध', mark: 'हि' },
 ]
 
 function Brand({ light = false }) {
@@ -52,38 +48,48 @@ function LanguageStep({ selected, onSelect, onContinue }) {
 }
 
 function LoginStep({ selected, onBack, onSignIn }) {
-  const [showPassword, setShowPassword] = useState(false)
   const [notice, setNotice] = useState('')
+  const googleButton = useRef(null)
 
-  function handleSubmit(event) {
-    event.preventDefault()
-    const formData = new FormData(event.currentTarget)
-    const email = formData.get('email')
-    const password = formData.get('password')
-
-    if (email === 'rohan@gmail.com' && password === '123456') {
-      onSignIn()
-      return
+  useEffect(() => {
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+    if (!clientId) {
+      setNotice('Google sign-in is not configured yet. Add VITE_GOOGLE_CLIENT_ID to the frontend environment.')
+      return undefined
     }
-
-    setNotice('That email and password do not match. Please try again.')
-  }
+    let cancelled = false
+    const render = () => {
+      if (cancelled || !window.google?.accounts?.id || !googleButton.current) return
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response) => {
+          if (response.credential) onSignIn(response.credential)
+          else setNotice('Google sign-in did not return an ID token. Please try again.')
+        },
+      })
+      window.google.accounts.id.renderButton(googleButton.current, { theme: 'outline', size: 'large', shape: 'rect', width: 320, text: 'continue_with' })
+    }
+    if (window.google?.accounts?.id) render()
+    else {
+      const script = document.createElement('script')
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.defer = true
+      script.onload = render
+      script.onerror = () => setNotice('Google sign-in could not load. Check your connection and try again.')
+      document.head.appendChild(script)
+    }
+    return () => { cancelled = true }
+  }, [onSignIn])
 
   return (
     <>
       <button className="back-button" onClick={onBack} type="button"><span>←</span> Back to languages</button>
       <div className="step-note"><span className="step-number">02</span><span>MAKE YOURSELF AT HOME</span></div>
       <h2 className="form-title">Your people<br />are <em>right here.</em></h2>
-      <p className="form-description">Sign in to find a little more connection, every day.</p>
-      <form className="login-form" onSubmit={handleSubmit}>
-        <label htmlFor="email">Email address</label>
-        <input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required />
-        <div className="password-label"><label htmlFor="password">Password</label><a href="#forgot" onClick={(event) => { event.preventDefault(); setNotice('Password reset will be available when sign-in is connected.') }}>Forgot password?</a></div>
-        <div className="password-wrap"><input id="password" name="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" required /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(!showPassword)}>{showPassword ? 'Hide' : 'Show'}</button></div>
-        <button className="primary-button" type="submit">Sign in <ArrowIcon /></button>
-        {notice && <p className="form-notice" role="status">{notice}</p>}
-      </form>
-      <div className="signup-line">New around here? <a href="#signup" onClick={(event) => { event.preventDefault(); setNotice('Account creation will be available soon.') }}>Create an account <span>↗</span></a></div>
+      <p className="form-description">Sign in securely to keep your conversations and personal guidance together.</p>
+      <div className="google-signin-wrap"><div ref={googleButton} /></div>
+      {notice && <p className="form-notice" role="status">{notice}</p>}
       <div className="chosen-language"><span>YOUR LANGUAGE</span><strong>{languages.find((language) => language.name === selected)?.native ?? 'English'}</strong></div>
     </>
   )
@@ -91,17 +97,19 @@ function LoginStep({ selected, onBack, onSignIn }) {
 
 function App() {
   const [step, setStep] = useState('language')
-  const [selectedLanguage, setSelectedLanguage] = useState('English')
+  const [selectedLanguage, setSelectedLanguage] = useState(() => sessionStorage.getItem('apnasathiLanguage') || 'English')
+  const [googleToken, setGoogleToken] = useState(() => sessionStorage.getItem('apnasathiGoogleToken') || '')
   const [page, setPage] = useState(() => (
-    window.location.pathname === '/record' && localStorage.getItem('apnasathiSignedIn') === 'true'
+    window.location.pathname === '/record' && Boolean(sessionStorage.getItem('apnasathiGoogleToken'))
       ? 'recorder'
       : 'welcome'
   ))
 
   useEffect(() => {
     function handleHistoryChange() {
-      const signedIn = localStorage.getItem('apnasathiSignedIn') === 'true'
+      const signedIn = Boolean(sessionStorage.getItem('apnasathiGoogleToken'))
       setPage(window.location.pathname === '/record' && signedIn ? 'recorder' : 'welcome')
+      if (signedIn) setGoogleToken(sessionStorage.getItem('apnasathiGoogleToken') || '')
     }
 
     window.addEventListener('popstate', handleHistoryChange)
@@ -114,19 +122,33 @@ function App() {
     setPage(nextPage)
   }
 
-  function signIn() {
-    localStorage.setItem('apnasathiSignedIn', 'true')
-    navigate('recorder')
-  }
+  const signIn = useCallback(async (credential) => {
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+      const response = await fetch(`${base}/auth/google`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id_token: credential }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data?.detail || 'Google sign-in failed. Please try again.')
+      const language = selectedLanguage === 'Hindi' ? 'hi' : 'en'
+      const profile = await fetch(`${base}/users/me/profile`, { method: 'PATCH', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ preferred_language: language }) })
+      if (!profile.ok) throw new Error('Signed in, but we could not save your language preference.')
+      sessionStorage.setItem('apnasathiGoogleToken', credential)
+      sessionStorage.setItem('apnasathiLanguage', selectedLanguage)
+      setGoogleToken(credential)
+      navigate('recorder')
+    } catch (error) { window.alert(error.message) }
+  }, [selectedLanguage])
 
   function signOut() {
     localStorage.removeItem('apnasathiSignedIn')
+    sessionStorage.removeItem('apnasathiGoogleToken')
+    sessionStorage.removeItem('apnasathiLanguage')
+    setGoogleToken('')
     setStep('login')
     navigate('welcome')
   }
 
   if (page === 'recorder') {
-    return <AudioRecorder onSignOut={signOut} />
+    return <ChatWorkspace onSignOut={signOut} token={googleToken} language={selectedLanguage === 'Hindi' ? 'hi' : 'en'} />
   }
 
   return (
