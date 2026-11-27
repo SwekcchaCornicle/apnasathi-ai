@@ -155,3 +155,47 @@ Run the backend tests after installing dependencies:
 ```powershell
 uv run --no-sync python -m unittest discover -s backend/tests -v
 ```
+
+
+## Stage 2: Google authentication
+
+The API now supports Google OpenID Connect sign-in. Configure a Google OAuth
+Web application client in Google Cloud Console and set the backend environment
+variable `GOOGLE_OAUTH_CLIENT_ID` to that exact client ID. Keep the client secret
+out of the backend: the browser obtains a Google ID token using the Google
+Identity Services client, then sends that ID token to the backend.
+
+### Endpoints
+
+- `POST /api/v1/auth/google`: body `{"id_token":"<Google ID token>"}`;
+  verifies the token signature, expiry, issuer, audience and verified email,
+  then creates or updates the user record and profile. It returns the ApnaSathi
+  user ID and profile fields, never the Google token.
+- `GET /api/v1/users/me`: requires `Authorization: Bearer <Google ID token>`.
+- `PATCH /api/v1/users/me/profile`: same bearer requirement; updates display
+  name, preferred language, timezone and preferences for the authenticated user.
+
+Install the backend dependencies using `uv pip install -r backend/requirements.txt`
+(the Docker build installs this file as part of its image build). Set
+`GOOGLE_OAUTH_CLIENT_ID` in your local environment or ECS task environment.
+Do not commit real OAuth client IDs if your deployment policy treats them as
+configuration secrets, and never commit client secrets or ID tokens.
+
+Example local PowerShell configuration:
+
+```powershell
+$env:GOOGLE_OAUTH_CLIENT_ID = "your-google-web-client-id.apps.googleusercontent.com"
+uv run --no-sync python -m uvicorn app:app --app-dir backend --reload --port 8006
+```
+
+Google ID tokens are short-lived. The frontend should obtain/refresh them using
+the Google Identity Services SDK and send the current ID token on each protected
+request. The backend validates the token with Google's published signing keys;
+it does not accept a user ID from the request body or trust email alone.
+
+**Important:** The existing audio, shopping, Instagram and watch-show endpoints
+remain backward compatible and are not yet protected by login. Stage 3 will
+connect authenticated user IDs to conversations, messages and search history.
+Do not expose account-specific data through those routes until that integration
+and endpoint authorization are complete. This stage does not create a separate
+application refresh token or session cookie.
