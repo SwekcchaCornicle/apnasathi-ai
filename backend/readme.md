@@ -199,3 +199,55 @@ connect authenticated user IDs to conversations, messages and search history.
 Do not expose account-specific data through those routes until that integration
 and endpoint authorization are complete. This stage does not create a separate
 application refresh token or session cookie.
+
+
+## Stage 4: multilingual semantic answer reuse
+
+The semantic retrieval layer uses FastEmbed with the local ONNX model
+`intfloat/multilingual-e5-base` (768 dimensions) and the existing PostgreSQL
+pgvector column. Query vectors use the E5 `query:` prefix; stored question/answer
+passages use `passage:`. The model weights are prefetched during the Docker image
+build under `FASTEMBED_CACHE_PATH`, so an ECS task does not need to download the
+model at request time. First local use downloads the model into the configured
+cache directory.
+
+### API
+
+- `POST /api/v1/knowledge/lookup` requires a verified Google ID token in the
+  Authorization Bearer header.
+- Request: `{"question":"How do I ...?","intent":"GENERAL_QUESTION","language":"en"}`.
+- A hit returns `found: true`, the stored answer, matched question, similarity,
+  knowledge ID and `source: "semantic_cache"`.
+- A miss or non-reusable intent returns `found: false` and
+  `source: "llm_required"`. The caller must then use the existing Gemini path.
+
+### Reuse policy
+
+- Only `GENERAL_QUESTION` is eligible initially. Shopping, posting, ordering,
+  calling, app navigation and other action intents are never replayed.
+- Private retrieval is always scoped to the authenticated user's ID. Shared
+  knowledge is disabled unless `ENABLE_SHARED_KNOWLEDGE=true`; shared records
+  must be explicitly curated and must not contain personal data.
+- Retrieval filters active entries, matching intent, matching language when
+  supplied, and quality score of at least 0.80.
+- The initial cosine similarity threshold is configurable with
+  `ANSWER_CACHE_SIMILARITY_THRESHOLD` (default 0.88). This is a conservative
+  starting point, not a validated universal threshold; evaluate it against a
+  representative multilingual test set before lowering it.
+- `store_approved_answer()` is a backend service function, not a public API.
+  Only trusted application code after a quality/review decision should call it.
+  Do not cache transient facts, unverified LLM outputs, personal user data as
+  shared content, or any action result that could trigger a side effect.
+
+### Runtime notes
+
+FastEmbed and E5 are free/open-source software and execute locally; compute,
+container image storage, and ECS memory/CPU are still infrastructure costs. The
+current Fargate task has limited memory, so benchmark embedding inference before
+production traffic. The API currently exposes semantic lookup as a separate
+protected endpoint; it is not yet inserted into the existing audio/chat response
+pipeline. Stage 3 persistence and the final LLM orchestration stage must connect
+user messages, approved answer storage, cache lookup, and Gemini fallback.
+
+Configure the values in `backend/.env.example`. No production migration,
+model download, test run, or deployment was performed as part of this code change.
