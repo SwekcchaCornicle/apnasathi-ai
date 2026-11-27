@@ -66,6 +66,7 @@ def find_reusable_answer(
             KnowledgeEmbedding.quality_score.is_not(None),
             KnowledgeEmbedding.quality_score >= MIN_QUALITY_SCORE,
             KnowledgeEmbedding.intent == intent,
+            *([KnowledgeEmbedding.language == language] if language else []),
             or_(
                 (KnowledgeEmbedding.visibility == "private") & (KnowledgeEmbedding.user_id == user_id),
                 (KnowledgeEmbedding.visibility == "shared") & (KnowledgeEmbedding.user_id.is_(None)),
