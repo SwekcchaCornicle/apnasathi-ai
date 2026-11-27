@@ -1,0 +1,10 @@
+ApnaSathi database migrations
+
+Run from the repository root after installing backend/requirements.txt and setting
+DATABASE_URL (or DB_HOST/DB_NAME/DATABASE_CREDENTIALS):
+
+    alembic -c backend/alembic.ini upgrade head
+
+The initial migration enables PostgreSQL's pgvector extension and creates all
+application tables. For RDS PostgreSQL, use the managed master role for the
+initial extension setup if the application role cannot create extensions.
