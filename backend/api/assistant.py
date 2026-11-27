@@ -9,11 +9,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from auth.dependencies import get_current_user
-from database.models import Conversation, Message, SearchHistory, User
+from database.models import Conversation, Memory, Message, SearchHistory, User
 from database.session import get_db
 from llm_model.classify_intent_action import intent_action
 from llm_model.llm_model import VertexUnavailable, vertex_model
@@ -110,13 +110,16 @@ def assistant_chat(
         similarity = round(match.similarity, 4)
     else:
         try:
-            classified = vertex_model(question)
+            now = datetime.now(timezone.utc)
+            memory_rows = db.scalars(select(Memory).where(Memory.user_id == user.id, Memory.is_active.is_(True), or_(Memory.expires_at.is_(None), Memory.expires_at > now)).order_by(Memory.updated_at.desc()).limit(20))
+            user_context = "; ".join(f"{memory.category}/{memory.memory_key}: {memory.memory_value}" for memory in memory_rows)[:4000]
+            classified = vertex_model(question, user_context=user_context, preferred_language=language)
         except VertexUnavailable:
             raise HTTPException(status_code=503, detail="The AI service is temporarily unavailable.") from None
         if classified is None:
             raise HTTPException(status_code=502, detail="The AI returned no structured response.")
         intent = classified.intent
-        language = require_supported_language(classified.response_language if classified.response_language and classified.response_language != "und" else language)
+        language = classified.response_language if classified.response_language in {"en", "hi"} else language
         if intent in {"GENERAL_QUESTION", "GENERAL_CONVERSATION", "GREETING"}:
             response_text = classified.response
             requires_confirmation = False
