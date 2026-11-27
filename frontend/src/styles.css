@@ -204,3 +204,12 @@ h1 em, .form-title em { color: #d3b28a; font-weight: 400; }
 
 .history-search { width:100%; margin:7px 0 10px; border:1px solid #e5e5dc; border-radius:8px; outline:0; padding:10px 12px; color:#394337; background:#fffefa; font-size:11px; }
 .history-search:focus { border-color:#899982; box-shadow:0 0 0 3px #8999821c; }
+
+.cognito-form { display:flex; flex-direction:column; gap:9px; margin-top:18px; }
+.cognito-form label { color:#5b6557; font-size:11px; font-weight:650; }
+.cognito-form input { width:100%; box-sizing:border-box; min-height:43px; border:1px solid #e1e3d9; border-radius:8px; outline:0; padding:10px 12px; color:#30372f; background:#fffefa; font:inherit; font-size:13px; }
+.cognito-form input:focus { border-color:#899982; box-shadow:0 0 0 3px #8999821c; }
+.cognito-form .primary-button { width:100%; justify-content:center; margin-top:8px; }
+.cognito-links { display:flex; flex-wrap:wrap; gap:15px; margin-top:15px; }
+.cognito-links button { border:0; padding:0; color:#526b50; background:transparent; font-size:11px; cursor:pointer; text-decoration:underline; }
+.form-notice { border-radius:7px; padding:10px 12px; color:#52634d; background:#edf2e8; font-size:11px; line-height:1.5; }
