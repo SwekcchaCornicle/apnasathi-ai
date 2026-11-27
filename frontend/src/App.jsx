@@ -134,7 +134,6 @@ function LoginStep({ selected, onBack, onSignIn }) {
 function App() {
   const [step, setStep] = useState('language')
   const [selectedLanguage, setSelectedLanguage] = useState(() => sessionStorage.getItem('apnasathiLanguage') || 'English')
-  const [selectedLanguage, setSelectedLanguage] = useState(() => sessionStorage.getItem('apnasathiLanguage') || 'English')
   const [cognitoToken, setCognitoToken] = useState(() => sessionStorage.getItem('apnasathiCognitoToken') || '')
   const [page, setPage] = useState(() => window.location.pathname === '/record' && Boolean(sessionStorage.getItem('apnasathiCognitoToken')) ? 'recorder' : 'welcome')
 
@@ -152,6 +151,11 @@ function App() {
     setPage('recorder')
   }, [])
 
+
+  function navigate(nextPage) {
+    window.history.pushState({}, '', nextPage === 'recorder' ? '/record' : '/')
+    setPage(nextPage === 'recorder' ? 'recorder' : 'welcome')
+  }
 
   function signOut() {
     sessionStorage.removeItem('apnasathiCognitoToken')
