@@ -85,7 +85,7 @@ class Memory(TimestampMixin, Base):
 
 class KnowledgeEmbedding(TimestampMixin, Base):
     __tablename__ = "knowledge_embeddings"
-    __table_args__ = (CheckConstraint("visibility IN ('private', 'shared')", name="ck_knowledge_visibility"), Index("ix_knowledge_user_active", "user_id", "is_active"), Index("ix_knowledge_intent_language", "intent", "language"))
+    __table_args__ = (CheckConstraint("visibility IN ('private', 'shared')", name="ck_knowledge_visibility"), CheckConstraint("(visibility = 'shared' AND user_id IS NULL) OR (visibility = 'private' AND user_id IS NOT NULL)", name="ck_knowledge_tenant_scope"), Index("ix_knowledge_user_active", "user_id", "is_active"), Index("ix_knowledge_intent_language", "intent", "language"))
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"))
     source_message_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"))
