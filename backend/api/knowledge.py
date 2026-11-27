@@ -1,4 +1,5 @@
 """Authenticated semantic answer lookup endpoint (cache miss is handled by LLM orchestration)."""
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from database.session import get_db
 from services.answer_reuse import REUSABLE_INTENTS, find_reusable_answer
 
 router = APIRouter(tags=["semantic-retrieval"])
+logger = logging.getLogger(__name__)
 
 
 class KnowledgeLookupRequest(BaseModel):
@@ -45,11 +47,11 @@ def lookup_knowledge(
             intent=payload.intent,
             language=payload.language,
         )
-    except RuntimeError:
-        raise HTTPException(status_code=503, detail="Semantic retrieval is not configured correctly.") from None
     except Exception:
-        # Avoid returning SQL/model internals; caller may continue with its normal LLM path.
-        raise HTTPException(status_code=503, detail="Semantic retrieval is temporarily unavailable.") from None
+        # Semantic retrieval is an optimization: fail open to the normal Gemini path.
+        db.rollback()
+        logger.warning("Semantic lookup unavailable; falling back to LLM.", exc_info=True)
+        return KnowledgeLookupResponse(found=False, source="llm_required")
     if match is None:
         return KnowledgeLookupResponse(found=False, source="llm_required")
     return KnowledgeLookupResponse(
