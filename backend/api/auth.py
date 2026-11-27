@@ -29,7 +29,7 @@ class UserProfileUpdate(BaseModel):
             return value
         normalized = value.strip().lower().replace("_", "-").split("-")[0]
         if normalized not in {"en", "hi"}:
-            raise ValueError("We're about to launch support for this language. For now, please choose Hindi or English.")
+            raise ValueError("We are about to launch support for this language.")
         return normalized
 
     display_name: str | None = Field(default=None, max_length=120)

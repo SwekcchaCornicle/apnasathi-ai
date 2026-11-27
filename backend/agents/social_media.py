@@ -140,10 +140,15 @@ import os
 from pathlib import Path
 from threading import Lock
 from time import monotonic
+from typing import Annotated
+from uuid import UUID
 
 from dotenv import dotenv_values
-from fastapi import APIRouter, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import PlainTextResponse
+
+from auth.dependencies import get_current_user
+from database.models import User
 
 instagram_router = APIRouter(prefix="/instagram", tags=["instagram"])
 COOKIE = "apnasathi_instagram_draft"
@@ -160,6 +165,7 @@ class PhotoDraft:
     authorization_url: str
     image_key: str
     image: bytes = field(repr=False)
+    owner_id: UUID
     credentials: InstagramCredentials | None = field(default=None, repr=False)
     phase: str = "authorization"
     media_id: str | None = None
@@ -185,15 +191,15 @@ def _active_drafts():
     return _drafts
 
 
-def _get_draft(request: Request):
+def _get_draft(request: Request, owner_id: UUID | None = None):
     draft = _active_drafts().get(request.cookies.get(COOKIE))
-    if draft is None:
+    if draft is None or (owner_id is not None and draft.owner_id != owner_id):
         raise HTTPException(404, "This Instagram draft expired. Attach the photo again.")
     return draft
 
 
-@instagram_router.post("/photo")
-def attach_photo(request: Request, response: Response, image: UploadFile = File(...)):
+@instagram_router.post("/photo", max_body_size=MAX_IMAGE_BYTES + 65536)
+def attach_photo(request: Request, response: Response, user: Annotated[User, Depends(get_current_user)], image: UploadFile = File(...)):
     agent = _configured_agent()
     jpeg = image.file.read(MAX_IMAGE_BYTES + 1)
     if len(jpeg) > MAX_IMAGE_BYTES:
@@ -206,13 +212,13 @@ def attach_photo(request: Request, response: Response, image: UploadFile = File(
     with _draft_lock:
         drafts = _active_drafts()
         previous = request.cookies.get(COOKIE)
-        if previous in drafts:
+        if previous in drafts and drafts[previous].owner_id == user.id:
             if drafts[previous].phase == "publishing":
                 raise HTTPException(409, "Wait for the current Instagram post to finish.")
             del drafts[previous]
         if len(drafts) >= 16:
             raise HTTPException(503, "Too many active Instagram drafts. Try again later.")
-        drafts[session] = PhotoDraft(monotonic() + DRAFT_SECONDS, state, url, token_urlsafe(32), jpeg)
+        drafts[session] = PhotoDraft(monotonic() + DRAFT_SECONDS, state, url, token_urlsafe(32), jpeg, user.id)
     response.set_cookie(COOKIE, session, max_age=DRAFT_SECONDS, httponly=True, secure=True, samesite="lax", path="/api/v1/instagram")
     return next_photo_step("", image_uploaded=True, authorization_url=url)
 
@@ -239,9 +245,9 @@ def instagram_callback(request: Request, state: str = "", code: str = ""):
 
 
 @instagram_router.get("/status")
-def instagram_status(request: Request):
+def instagram_status(request: Request, user: Annotated[User, Depends(get_current_user)]):
     with _draft_lock:
-        draft = _get_draft(request)
+        draft = _get_draft(request, user.id)
         if draft.phase == "caption":
             return next_photo_step("", image_uploaded=True, connected=True)
         return {"step": draft.phase, "media_id": draft.media_id}
@@ -260,10 +266,15 @@ def instagram_image(image_key: str):
 
 
 @instagram_router.post("/publish")
-def publish_instagram_photo(request: Request, caption: str = Form("", max_length=2200)):
+def publish_instagram_photo(
+    request: Request, user: Annotated[User, Depends(get_current_user)],
+    caption: str = Form("", max_length=2200), confirmed: bool = Form(False),
+):
+    if not confirmed:
+        raise HTTPException(422, "Review and confirm the post before publishing.")
     agent = _configured_agent()
     with _draft_lock:
-        draft = _get_draft(request)
+        draft = _get_draft(request, user.id)
         if draft.phase == "published":
             return {"step": "published", "media_id": draft.media_id, "response": "Your photo was posted to Instagram."}
         if draft.phase != "caption" or draft.credentials is None:
@@ -292,3 +303,13 @@ def publish_instagram_photo(request: Request, caption: str = Form("", max_length
         draft.image = b""
         draft.credentials = None
     return {"step": "published", "media_id": media_id, "response": "Your photo was posted to Instagram."}
+
+
+@instagram_router.delete("/draft", status_code=204)
+def cancel_instagram_draft(request: Request, response: Response, user: Annotated[User, Depends(get_current_user)]):
+    with _draft_lock:
+        draft = _get_draft(request, user.id)
+        if draft.phase == "publishing":
+            raise HTTPException(409, "Wait for the current Instagram post to finish.")
+        del _drafts[request.cookies[COOKIE]]
+    response.delete_cookie(COOKIE, path="/api/v1/instagram", secure=True, httponly=True)

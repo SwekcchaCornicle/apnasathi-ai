@@ -1,12 +1,21 @@
 import logging
 import re
 from dataclasses import asdict
+from functools import lru_cache
 from pathlib import Path
 from shutil import copyfileobj
 from tempfile import TemporaryDirectory
 
 from av.error import FFmpegError
-from fastapi import APIRouter, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).with_name('.env'))
+
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
 from pydantic import TypeAdapter, ValidationError
 
@@ -23,13 +32,26 @@ from storage.s3_audio_storage import (
     validate_audio,
 )
 
+from api.assistant import router as assistant_router
+from api.auth import router as auth_router
+from api.knowledge import router as knowledge_router
+from auth.dependencies import get_current_user
+from sqlalchemy.exc import OperationalError
+from api.persistence import router as persistence_router
+
+
 REPLY_INTENTS = {"GREETING", "GENERAL_QUESTION", "GENERAL_CONVERSATION", "WATCH_SHOW"}
 
 router = APIRouter(tags=["health"])
 
 logger = logging.getLogger(__name__)
 
-model = WhisperModel("base")
+model = None
+
+
+@lru_cache(maxsize=1)
+def whisper_model():
+    return WhisperModel("base")
 
 SHOPPING_SESSION = TypeAdapter(ShoppingSession)
 SHOPPING_REQUEST = re.compile(
@@ -47,7 +69,7 @@ def shopping_payload(session: ShoppingSession, language: str, *, launch: bool = 
     }
 
 
-@router.post("/shopping/reply")
+@router.post("/shopping/reply", dependencies=[Depends(get_current_user)])
 def handle_shopping_reply(
     session: str = Form(..., max_length=16000),
     language: str = Form("en"),
@@ -68,7 +90,7 @@ def handle_shopping_reply(
     }
 
 
-@router.post("/upload-audio", max_body_size=MAX_AUDIO_REQUEST_BYTES)
+@router.post("/upload-audio", dependencies=[Depends(get_current_user)], max_body_size=MAX_AUDIO_REQUEST_BYTES)
 def upload_audio(
     audio: UploadFile = File(...),
     shopping_session: str | None = Form(None, max_length=16000),
@@ -121,7 +143,7 @@ def upload_audio(
 
 def transcribe_audio(file_path: Path, *, strip: bool = False) -> str:
     try:
-        segments, _ = model.transcribe(str(file_path))
+        segments, _ = (model if model is not None else whisper_model()).transcribe(str(file_path))
         # Whisper's segments are lazy, so decoding must finish before the temp file closes.
         text = " ".join(segment.text.strip() if strip else segment.text for segment in segments)
     except FFmpegError:
@@ -145,7 +167,7 @@ def transcribe_temporary_audio(audio: UploadFile) -> str:
         return transcribe_audio(file_path, strip=True)
 
 
-@router.post("/instagram/caption", max_body_size=MAX_AUDIO_REQUEST_BYTES)
+@router.post("/instagram/caption", dependencies=[Depends(get_current_user)], max_body_size=MAX_AUDIO_REQUEST_BYTES)
 def transcribe_instagram_caption(audio: UploadFile = File(...)):
     text = transcribe_temporary_audio(audio)
     if not text:
@@ -153,21 +175,22 @@ def transcribe_instagram_caption(audio: UploadFile = File(...)):
     return {"text": text}
 
 
-@router.post("/watch-show/troubleshoot", max_body_size=MAX_AUDIO_REQUEST_BYTES)
+@router.post("/watch-show/troubleshoot", dependencies=[Depends(get_current_user)], max_body_size=MAX_AUDIO_REQUEST_BYTES)
 def troubleshoot_watch_show(
     step: str = Form(...),
     language: str = Form("en"),
     platform: str = Form("the streaming service", min_length=1, max_length=80),
     audio: UploadFile | None = File(None),
+    reply: str | None = Form(None, max_length=120),
 ):
-    if audio is None:
+    if audio is None and reply is None:
         if step not in {"opened", "playing", "tab"}:
             raise HTTPException(status_code=400, detail="Choose a valid initial guide step.")
         return guide_reply(step, language, platform=platform)
     if step not in NEXT_STEP:
         raise HTTPException(status_code=400, detail="Choose an active guide step.")
 
-    transcript = transcribe_temporary_audio(audio)
+    transcript = transcribe_temporary_audio(audio) if audio is not None else reply
     return {**guide_reply(step, language, transcript, platform=platform), "text": transcript}
 
 
@@ -181,6 +204,30 @@ app = FastAPI(
     version="0.1.0",
     description="use this to operate other app",
 )
+
+@app.exception_handler(RequestValidationError)
+async def redact_validation_input(request, error):
+    safe_errors = [
+        {key: value for key, value in item.items() if key not in {"input", "ctx"}}
+        for item in error.errors()
+    ]
+    return await request_validation_exception_handler(request, RequestValidationError(safe_errors))
+
+
+@app.exception_handler(OperationalError)
+async def handle_database_unavailable(_request, _error):
+    return JSONResponse(status_code=503, content={"detail": "The database is temporarily unavailable."})
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_credentials=True,
+    allow_headers=["Authorization", "Content-Type"],
+)
+for authenticated_router in (auth_router, assistant_router, knowledge_router, persistence_router):
+    app.include_router(authenticated_router, prefix="/api/v1")
 
 app.include_router(router, prefix="/api/v1")
 app.include_router(instagram_router, prefix="/api/v1")

@@ -87,7 +87,7 @@ class AudioWorkflowTests(unittest.TestCase):
         self.model.transcribe.side_effect = self.transcribe
         intent = IntentSchema(intent="UNKNOWN", response="Reply", response_language="en",
                               confidence=.9, requires_confirmation=False)
-        with patch.object(app, "vertex_model", return_value=intent), patch.object(app, "generate_voice", return_value={}):
+        with patch.object(app, "vertex_model", return_value=intent), patch.object(app, "generate_voice", return_value={}), patch.dict(app.app.dependency_overrides, {app.get_current_user: lambda: object()}):
             status, payload = asyncio.run(post(len(body)))
         self.assertEqual(status, 200, payload)
         self.assertEqual(json.loads(payload)["text"], "Hello")

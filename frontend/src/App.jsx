@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
-import { CognitoIdentityProviderClient, SignUpCommand, ConfirmSignUpCommand, InitiateAuthCommand, ForgotPasswordCommand, ConfirmForgotPasswordCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { CognitoIdentityProviderClient, SignUpCommand, ConfirmSignUpCommand, ForgotPasswordCommand, ConfirmForgotPasswordCommand } from '@aws-sdk/client-cognito-identity-provider'
+import { signInWithSrp } from './cognito.js'
 import ChatWorkspace from './ChatWorkspace.jsx'
 
 const languages = [
@@ -21,6 +22,7 @@ function ArrowIcon() {
 }
 
 function LanguageStep({ selected, onSelect, onContinue }) {
+  const [showLanguageNotice, setShowLanguageNotice] = useState(false)
   return (
     <>
       <div className="step-note"><span className="step-number">01</span><span>FIRST, THE LITTLE THINGS</span></div>
@@ -43,7 +45,8 @@ function LanguageStep({ selected, onSelect, onContinue }) {
         ))}
       </div>
       <button className="primary-button" onClick={onContinue} type="button">Continue <ArrowIcon /></button>
-      <p className="fine-print">You can always change this later.</p>
+      <button className="back-button" onClick={() => setShowLanguageNotice(true)} type="button">Looking for another language?</button>
+      {showLanguageNotice && <p className="form-notice" role="status">We are about to launch support for this language.</p>}
     </>
   )
 }
@@ -58,13 +61,14 @@ function LoginStep({ selected, onBack, onSignIn }) {
   const [busy, setBusy] = useState(false)
   const region = import.meta.env.VITE_COGNITO_REGION || 'ap-south-1'
   const clientId = import.meta.env.VITE_COGNITO_CLIENT_ID
+  const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID
   const cognito = new CognitoIdentityProviderClient({ region })
   const language = selected === 'Hindi' ? 'hi' : 'en'
 
   async function submit(event) {
     event.preventDefault()
     setNotice('')
-    if (!clientId) { setNotice('Cognito is not configured. Set VITE_COGNITO_CLIENT_ID in frontend/.env.local.'); return }
+    if (!clientId || !userPoolId) { setNotice('Cognito is not configured. Set VITE_COGNITO_CLIENT_ID in frontend/.env.local.'); return }
     setBusy(true)
     try {
       if (mode === 'signup') {
@@ -76,9 +80,7 @@ function LoginStep({ selected, onBack, onSignIn }) {
         setMode('login')
         setNotice('Email verified. You can now sign in.')
       } else if (mode === 'login') {
-        const result = await cognito.send(new InitiateAuthCommand({ ClientId: clientId, AuthFlow: 'USER_PASSWORD_AUTH', AuthParameters: { USERNAME: email.trim().toLowerCase(), PASSWORD: password } }))
-        const idToken = result.AuthenticationResult?.IdToken
-        if (!idToken) throw new Error('Cognito did not return an ID token. Check the app client authentication flow settings.')
+        const idToken = await signInWithSrp({ userPoolId, clientId, email: email.trim().toLowerCase(), password })
         await onSignIn(idToken, language)
       } else if (mode === 'forgot') {
         await cognito.send(new ForgotPasswordCommand({ ClientId: clientId, Username: email.trim().toLowerCase() }))
@@ -111,11 +113,11 @@ function LoginStep({ selected, onBack, onSignIn }) {
       <h2 className="form-title">{heading}</h2>
       <p className="form-description">Sign in securely to keep your conversations and personal guidance together.</p>
       <form className="cognito-form" onSubmit={submit}>
-        <label>Email address</label>
-        <input type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" disabled={mode === 'confirm' || mode === 'reset'} />
-        {['signup','login'].includes(mode) && <><label>Password</label><input type="password" required minLength={8} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /></>}
-        {['confirm','reset'].includes(mode) && <><label>Email verification code</label><input required value={code} onChange={(event) => setCode(event.target.value)} placeholder="Enter code from email" /></>}
-        {mode === 'reset' && <><label>New password</label><input type="password" required minLength={8} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></>}
+        <label htmlFor="account-email">Email address</label>
+        <input id="account-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" disabled={mode === 'confirm' || mode === 'reset'} />
+        {['signup','login'].includes(mode) && <><label htmlFor="account-password">Password</label><input id="account-password" type="password" required minLength={8} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /></>}
+        {['confirm','reset'].includes(mode) && <><label htmlFor="account-code">Email verification code</label><input id="account-code" required value={code} onChange={(event) => setCode(event.target.value)} placeholder="Enter code from email" /></>}
+        {mode === 'reset' && <><label htmlFor="account-new-password">New password</label><input id="account-new-password" type="password" required minLength={8} autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></>}
         <button className="primary-button" type="submit" disabled={busy}>{busy ? 'Please wait…' : ({ signup: 'Create account', confirm: 'Verify email', login: 'Sign in', forgot: 'Send reset code', reset: 'Reset password' })[mode]}</button>
       </form>
       {notice && <p className="form-notice" role="status">{notice}</p>}
@@ -152,18 +154,13 @@ function App() {
   }, [])
 
 
-  function navigate(nextPage) {
-    window.history.pushState({}, '', nextPage === 'recorder' ? '/record' : '/')
-    setPage(nextPage === 'recorder' ? 'recorder' : 'welcome')
-  }
-
-  function signOut() {
+  const signOut = useCallback(() => {
     sessionStorage.removeItem('apnasathiCognitoToken')
-    sessionStorage.removeItem('apnasathiLanguage')
     setCognitoToken('')
     setStep('login')
-    navigate('welcome')
-  }
+    window.history.replaceState({}, '', '/')
+    setPage('welcome')
+  }, [])
 
   if (page === 'recorder') {
     return <ChatWorkspace onSignOut={signOut} token={cognitoToken} language={sessionStorage.getItem('apnasathiLanguage') === 'Hindi' ? 'hi' : 'en'} />
@@ -190,7 +187,7 @@ function App() {
         <div className="form-top"><span className="mobile-brand"><Brand /></span><span className="already-here">{step === 'language' ? <>Already a member? <button type="button" onClick={() => setStep('login')}>Sign in</button></> : <>New to ApnaSathi? <button type="button" onClick={() => setStep('language')}>Get started</button></>}</span></div>
         <div className="form-content" key={step}>
           {step === 'language'
-            ? <LanguageStep selected={selectedLanguage} onSelect={setSelectedLanguage} onContinue={() => setStep('login')} />
+            ? <LanguageStep selected={selectedLanguage} onSelect={(language) => { sessionStorage.setItem('apnasathiLanguage', language); setSelectedLanguage(language) }} onContinue={() => setStep('login')} />
             : <LoginStep selected={selectedLanguage} onBack={() => setStep('language')} onSignIn={signIn} />}
         </div>
         <footer className="form-footer"><span>© 2025 ApnaSathi</span><div><a href="#privacy">Privacy</a><a href="#help">Need help?</a></div></footer>

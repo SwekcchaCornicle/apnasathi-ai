@@ -33,6 +33,8 @@ class ApplicationStack(Stack):
         google_location: str = "global",
         wif_secret_arn: str | None = None,
         https_proxy: str | None = None,
+        cognito_user_pool: str | None = None,
+        cognito_client_id: str | None = None,
         **kwargs,
     ):
         super().__init__(scope, construct_id, **kwargs)
@@ -145,6 +147,14 @@ class ApplicationStack(Stack):
                 NO_PROXY="localhost,127.0.0.1,169.254.170.2,169.254.170.23,169.254.169.254,.amazonaws.com",
             )
 
+        cognito_environment = {}
+        if cognito_user_pool and cognito_client_id:
+            cognito_environment = {
+                "COGNITO_REGION": cognito_user_pool.split("_", 1)[0],
+                "COGNITO_USER_POOL_ID": cognito_user_pool,
+                "COGNITO_CLIENT_ID": cognito_client_id,
+            }
+
         self.task_definition = ecs.CfnTaskDefinition(
             self,
             "BackendTaskDefinition",
@@ -178,7 +188,7 @@ class ApplicationStack(Stack):
                     ],
                     environment=[
                         *(ecs.CfnTaskDefinition.KeyValuePairProperty(name=name, value=value)
-                          for name, value in google_environment.items()),
+                          for name, value in (google_environment | cognito_environment).items()),
                         ecs.CfnTaskDefinition.KeyValuePairProperty(
                             name="AUDIO_S3_BUCKET", value=audio_bucket.bucket_name,
                         ),

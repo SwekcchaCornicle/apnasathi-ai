@@ -23,12 +23,12 @@ def generate_content(**request):
         raise VertexUnavailable("The AI service is temporarily unavailable.") from None
 
 
-def vertex_model(transcription):
-    return classify_intent(transcription)
+def vertex_model(transcription, *, user_context=None, preferred_language="en"):
+    return classify_intent(transcription, user_context=user_context, preferred_language=preferred_language)
 
 
-def classify_intent(transcription):
-    prompt_text = prompt(transcription)
+def classify_intent(transcription, *, user_context=None, preferred_language="en"):
+    prompt_text = prompt(transcription, user_context=user_context, preferred_language=preferred_language)
     response = generate_content(
         model="gemini-3.8-flash",
         contents=prompt_text,

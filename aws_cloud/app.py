@@ -30,6 +30,17 @@ if image_tag is None:
 if not isinstance(image_tag, str) or not re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}", image_tag):
     raise ValueError("backendImageTag must be a valid Docker image tag.")
 
+cognito_user_pool = app.node.try_get_context("cognitoUserPoolId")
+cognito_client_id = app.node.try_get_context("cognitoClientId")
+if bool(cognito_user_pool) != bool(cognito_client_id):
+    raise ValueError("Set both cognitoUserPoolId and cognitoClientId.")
+if cognito_user_pool and (
+    not re.fullmatch(r"[a-z]{2}(?:-[a-z]+)+-[0-9]_[A-Za-z0-9]+", str(cognito_user_pool))
+    or not re.fullmatch(r"[a-zA-Z0-9]{1,128}", str(cognito_client_id))
+):
+    raise ValueError("Set valid Cognito user pool and public app client identifiers.")
+
+
 # -------------------------------------------------
 # Stack 1: Network
 # -------------------------------------------------
@@ -106,6 +117,8 @@ application_stack = ApplicationStack(
     google_location=google_location,
     wif_secret_arn=wif_secret_arn,
     https_proxy=proxy_url,
+    cognito_user_pool=cognito_user_pool,
+    cognito_client_id=cognito_client_id,
     env=env,
 )
 

@@ -9,13 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1000.0",
     "@tailwindcss/vite": "latest",
-    "vite": "latest",
+    "@vitejs/plugin-react": "latest",
+    "amazon-cognito-identity-js": "^6.3.22",
     "react": "latest",
     "react-dom": "latest",
     "tailwindcss": "latest",
-    "@aws-sdk/client-cognito-identity-provider": "^3.1000.0"
-  },
-  "devDependencies": {}
+    "vite": "latest"
+  }
 }

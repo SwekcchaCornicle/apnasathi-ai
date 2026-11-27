@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import InstagramDraft from './InstagramDraft.jsx'
 
 const API = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const INTENTS = [
@@ -14,14 +15,19 @@ function authHeaders(token) { return { Authorization: `Bearer ${token}` } }
 async function apiRequest(path, token, options = {}) {
   const response = await fetch(`${API}${path}`, {
     ...options,
-    headers: { ...authHeaders(token), ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
+    headers: { ...authHeaders(token), ...(typeof options.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
   })
   const data = response.status === 204 ? null : await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(data?.detail?.message || data?.detail || 'Something went wrong. Please try again.')
+  if (!response.ok) {
+    const detail = data?.detail
+    const error = new Error(detail?.message || (typeof detail === 'string' ? detail : 'Something went wrong. Please try again.'))
+    error.status = response.status
+    throw error
+  }
   return data
 }
 function categoryFor(conversation, messages) {
-  const intents = messages.map((message) => message.intent).filter(Boolean)
+  const intents = messages.filter((message) => message.role === 'assistant').map((message) => message.intent).filter(Boolean).reverse()
   const intent = intents.find((value) => value !== 'GREETING') || conversation.last_intent
   if (intent) {
     const found = INTENTS.find((item) => item.id === intent)
@@ -50,13 +56,33 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
   const scrollRef = useRef(null)
   const recorderRef = useRef(null)
   const streamRef = useRef(null)
-  const chunksRef = useRef([])
+  const mountedRef = useRef(false)
+  const activeIdRef = useRef(null)
+  const [requestingMic, setRequestingMic] = useState(false)
+  const [videoGuide, setVideoGuide] = useState(null)
+  const [dismissedDraft, setDismissedDraft] = useState(null)
+
+  function selectConversation(id, messages) {
+    setVideoGuide(null)
+    activeIdRef.current = id
+    setActiveId(id)
+    setMessageList(messages)
+  }
+
+  const request = useCallback(async (path, options) => {
+    try {
+      return await apiRequest(path, token, options)
+    } catch (error) {
+      if (error.status === 401) onSignOut()
+      throw error
+    }
+  }, [onSignOut, token])
 
   const refreshConversations = useCallback(async () => {
-    const rows = await apiRequest('/conversations?limit=100', token)
+    const rows = await request('/conversations?limit=100')
     const hydrated = await Promise.all(rows.map(async (conversation) => {
       try {
-        const messages = await apiRequest(`/conversations/${conversation.id}/messages?limit=200`, token)
+        const messages = await request(`/conversations/${conversation.id}/messages?limit=200`)
         return { ...conversation, messages, category: categoryFor(conversation, messages), summary: summaryFor(messages) }
       } catch {
         return { ...conversation, messages: [], category: INTENTS[5], summary: conversation.title || 'Conversation' }
@@ -68,7 +94,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
       conversations: hydrated.filter((conversation) => conversation.category.id === intent.id),
     })).filter((group) => group.conversations.length))
     return hydrated
-  }, [token])
+  }, [request])
 
   useEffect(() => {
     let alive = true
@@ -77,35 +103,34 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
         const rows = await refreshConversations()
         if (!alive) return
         if (rows.length) {
-          setActiveId(rows[0].id)
-          setMessageList(rows[0].messages)
+          selectConversation(rows[0].id, rows[0].messages)
         } else {
-          const created = await apiRequest('/conversations', token, {
+          const created = await request('/conversations', {
             method: 'POST', body: JSON.stringify({ title: 'New conversation', channel: 'chat', language }),
           })
           if (!alive) return
-          setActiveId(created.id)
+          selectConversation(created.id, [])
           await refreshConversations()
         }
       } catch (error) { if (alive) setNotice(error.message) }
       finally { if (alive) setLoading(false) }
     })()
     return () => { alive = false }
-  }, [refreshConversations, token, language])
+  }, [refreshConversations, request, language])
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
   }, [messageList, busy])
 
   async function newConversation() {
+    if (busy || recording || requestingMic) return
     setNotice('')
     setBusy(true)
     try {
-      const created = await apiRequest('/conversations', token, {
+      const created = await request('/conversations', {
         method: 'POST', body: JSON.stringify({ title: 'New conversation', channel: 'chat', language }),
       })
-      setActiveId(created.id)
-      setMessageList([])
+      selectConversation(created.id, [])
       await refreshConversations()
       setDrawerOpen(false)
     } catch (error) { setNotice(error.message) }
@@ -113,32 +138,32 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
   }
 
   async function openConversation(conversation) {
-    setActiveId(conversation.id)
-    setMessageList(conversation.messages)
+    if (busy || recording || requestingMic) return
+    selectConversation(conversation.id, conversation.messages)
     setDrawerOpen(false)
     try {
-      const messages = await apiRequest(`/conversations/${conversation.id}/messages?limit=200`, token)
-      setMessageList(messages)
+      const messages = await request(`/conversations/${conversation.id}/messages?limit=200`)
+      if (activeIdRef.current === conversation.id) setMessageList(messages)
     } catch (error) { setNotice(error.message) }
   }
 
   async function sendText(text = draft) {
     const content = text.trim()
-    if (!content || !activeId || busy) return
+    if (!content || !activeId || busy || recording || requestingMic) return
     setDraft('')
     setNotice('')
     setMessageList((current) => [...current, { id: `pending-${Date.now()}`, role: 'user', content, language }])
     setBusy(true)
     try {
-      const result = await apiRequest('/assistant/chat', token, {
+      const result = await request('/assistant/chat', {
         method: 'POST', body: JSON.stringify({ conversation_id: activeId, message: content }),
       })
       setMessageList((current) => [
         ...current.filter((item) => !String(item.id).startsWith('pending-')),
         { id: result.user_message_id, role: 'user', content, language: result.language },
-        { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source },
+        { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback },
       ])
-      await refreshConversations()
+      void refreshConversations().catch(() => {})
     } catch (error) {
       setMessageList((current) => current.filter((item) => !String(item.id).startsWith('pending-')))
       setDraft(content)
@@ -146,8 +171,25 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
     } finally { setBusy(false) }
   }
 
+  async function guideVideo(platform, step, reply, audio) {
+    const body = new FormData()
+    body.append('language', language)
+    body.append('platform', platform)
+    body.append('step', step)
+    if (reply) body.append('reply', reply)
+    if (audio) body.append('audio', audio, 'voice-message.webm')
+    setBusy(true)
+    setNotice('')
+    try {
+      const result = await request('/watch-show/troubleshoot', { method: 'POST', body })
+      setVideoGuide({ ...result, platform })
+    } catch (error) { setNotice(error.message) }
+    finally { setBusy(false) }
+  }
+
   async function toggleMic() {
     if (recording) {
+      setBusy(true)
       recorderRef.current?.stop()
       setRecording(false)
       return
@@ -156,44 +198,68 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
       setNotice('Microphone recording is not supported in this browser.')
       return
     }
+    if (!activeId || busy || requestingMic) return
+    setRequestingMic(true)
+    setNotice('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
       streamRef.current = stream
-      chunksRef.current = []
+      const chunks = []
       const mime = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find((type) => MediaRecorder.isTypeSupported(type))
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
       recorderRef.current = recorder
-      recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data) }
+      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data) }
       recorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop())
         streamRef.current = null
-        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
-        if (!blob.size) return
+        const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })
+        if (!mountedRef.current) return
+        if (!blob.size) { setBusy(false); setNotice('No audio was recorded. Please try again.'); return }
+        if (videoGuide && !videoGuide.done) {
+          await guideVideo(videoGuide.platform, videoGuide.step, null, blob)
+          return
+        }
         setBusy(true)
         setNotice('')
         try {
           const form = new FormData()
           form.append('audio', blob, 'voice-message.webm')
-          const response = await fetch(`${API}/assistant/audio?conversation_id=${activeId}`, { method: 'POST', headers: authHeaders(token), body: form })
-          const result = await response.json().catch(() => ({}))
-          if (!response.ok) throw new Error(result?.detail || 'Voice request failed.')
+          const result = await request(`/assistant/audio?conversation_id=${activeId}`, { method: 'POST', body: form })
           setMessageList((current) => [
             ...current,
-            { id: result.user_message_id, role: 'user', content: '🎙️ Voice message', language: result.language },
-            { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source },
+            { id: result.user_message_id, role: 'user', content: result.transcription || '🎙️ Voice message', language: result.language },
+            { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback },
           ])
-          await refreshConversations()
+          void refreshConversations().catch(() => {})
         } catch (error) { setNotice(error.message) }
         finally { setBusy(false) }
       }
       recorder.start()
       setRecording(true)
-    } catch { setNotice('Please allow microphone access to talk to ApnaSathi.') }
+    } catch {
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+      setNotice('Could not start microphone recording. Check your microphone permissions.')
+    } finally {
+      if (mountedRef.current) setRequestingMic(false)
+    }
   }
 
-  useEffect(() => () => {
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
-    streamRef.current?.getTracks().forEach((track) => track.stop())
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      const recorder = recorderRef.current
+      if (recorder) {
+        recorder.onstop = null
+        if (recorder.state === 'recording') recorder.stop()
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+    }
   }, [])
 
   const activeConversation = useMemo(() => conversations.find((item) => item.id === activeId), [conversations, activeId])
@@ -214,7 +280,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
         <div className="chat-main">
           <div className="chat-heading">
             <div><span className="chat-eyebrow">YOUR PERSONAL ASSISTANT</span><h1>How can I help today?</h1><p>Ask anything, or tap the microphone and speak naturally.</p></div>
-            <button className="new-chat-button" type="button" onClick={newConversation} disabled={busy}>＋ New chat</button>
+            <button className="new-chat-button" type="button" onClick={newConversation} disabled={busy || recording || requestingMic}>＋ New chat</button>
           </div>
 
           <div className="chat-thread" role="log" aria-label="Chat messages">
@@ -237,19 +303,48 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                 <div className="chat-message-body">
                   <span className="chat-author">{message.role === 'user' ? 'You' : 'ApnaSathi'}</span>
                   <p>{message.content}</p>
+                  {message.playback && (
+                    <div className="suggestion-row">
+                      <a className="voice-link" href={message.playback.url} target="_blank" rel="noopener noreferrer">Open in {message.playback.platform}</a>
+                      {message.id === messageList.at(-1)?.id && <button type="button" disabled={busy || recording} onClick={() => void guideVideo(message.playback.platform, 'playing')}>Troubleshoot playback</button>}
+                    </div>
+                  )}
+                  {message.intent === 'POST_PHOTO' && message.id === messageList.at(-1)?.id && dismissedDraft !== message.id && (
+                    <InstagramDraft key={message.id} request={request} onCancel={() => setDismissedDraft(message.id)} />
+                  )}
+                  {message.shopping && message.id === messageList.at(-1)?.id && !message.shopping.done && (
+                    <div className="suggestion-row">
+                      {(message.shopping.actions || (message.shopping.action ? [message.shopping.action] : [])).map((item) => (
+                        <a className="voice-link" key={item.url} href={item.url} target="_blank" rel="noopener noreferrer">{item.label}</a>
+                      ))}
+                      {message.shopping.choices.map((choice) => (
+                        <button key={choice} type="button" onClick={() => void sendText(choice)} disabled={busy || recording}>{choice}</button>
+                      ))}
+                      <button type="button" onClick={() => void sendText('Cancel')} disabled={busy || recording}>End shopping</button>
+                    </div>
+                  )}
                   {message.role === 'assistant' && message.source === 'semantic_cache' && <span className="reuse-note">↻ Reused your previous guidance</span>}
                 </div>
               </article>
             ))}
+            {videoGuide && <section className="chat-message" aria-label="Playback troubleshooting">
+              <div className="chat-message-body">
+                <p>{videoGuide.response}</p>
+                {!videoGuide.done && <div className="suggestion-row">
+                  {['Yes', 'No'].map((reply) => <button key={reply} type="button" disabled={busy || recording} onClick={() => void guideVideo(videoGuide.platform, videoGuide.step, reply)}>{reply}</button>)}
+                </div>}
+                <button type="button" disabled={busy || recording} onClick={() => setVideoGuide(null)}>Close playback guide</button>
+              </div>
+            </section>}
             {busy && <div className="assistant-thinking"><span></span><span></span><span></span><small>ApnaSathi is thinking</small></div>}
             <div ref={scrollRef} />
           </div>
 
           {notice && <div className="chat-notice" role="status">{notice}</div>}
           <form className="chat-composer" onSubmit={(event) => { event.preventDefault(); void sendText() }}>
-            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendText() } }} placeholder={language === 'hi' ? 'यहाँ अपना संदेश लिखें…' : 'Message ApnaSathi…'} rows="1" disabled={busy || loading} />
-            <button className={`mic-button ${recording ? 'mic-recording' : ''}`} type="button" onClick={() => void toggleMic()} disabled={busy || loading} aria-label={recording ? 'Stop recording and send' : 'Speak to ApnaSathi'}>{recording ? '■' : '🎙'}</button>
-            <button className="send-button" type="submit" disabled={!draft.trim() || busy || loading} aria-label="Send message">↑</button>
+            <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void sendText() } }} placeholder={language === 'hi' ? 'यहाँ अपना संदेश लिखें…' : 'Message ApnaSathi…'} rows="1" disabled={busy || loading} />
+            <button className={`mic-button ${recording ? 'mic-recording' : ''}`} type="button" onClick={() => void toggleMic()} disabled={busy || loading || requestingMic || !activeId} aria-label={recording ? 'Stop recording and send' : 'Speak to ApnaSathi'}>{recording ? '■' : '🎙'}</button>
+            <button className="send-button" type="submit" disabled={!draft.trim() || busy || loading || !activeId || recording || requestingMic} aria-label="Send message">↑</button>
           </form>
           <p className="composer-footnote">Your conversations are private to your account.</p>
         </div>

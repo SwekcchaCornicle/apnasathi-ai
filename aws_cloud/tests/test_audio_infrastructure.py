@@ -18,6 +18,8 @@ class AudioInfrastructureTests(unittest.TestCase):
         context = {
             "backendDesiredCount": "1",
             "backendImageTag": "preflight-arm64",
+            "cognitoUserPoolId": "ap-south-1_PoolFixture",
+            "cognitoClientId": "clientfixture",
             "googleCloudProject": "example-project",
             "googleWifSecretArn": "arn:aws:secretsmanager:ap-south-1:111111111111:secret:vertex-config-Ab12Cd",
         }
@@ -41,6 +43,16 @@ class AudioInfrastructureTests(unittest.TestCase):
             key: value for key, value in self.templates[stack]["Resources"].items()
             if value["Type"] == kind
         }
+
+    def test_ecs_can_receive_public_cognito_configuration(self):
+        tasks = self.resources("Application", "AWS::ECS::TaskDefinition")
+        [task] = tasks.values()
+        [container] = task["Properties"]["ContainerDefinitions"]
+        env = {item["Name"]: item["Value"] for item in container["Environment"]}
+        self.assertEqual(env["COGNITO_REGION"], "ap-south-1")
+        self.assertEqual(env["COGNITO_USER_POOL_ID"], "ap-south-1_PoolFixture")
+        self.assertEqual(env["COGNITO_CLIENT_ID"], "clientfixture")
+        self.assertNotIn("COGNITO_CLIENT_SECRET", env)
 
     def test_audio_bucket_security_and_retention(self):
         buckets = self.resources("Infrastructure", "AWS::S3::Bucket")

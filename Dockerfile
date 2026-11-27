@@ -6,6 +6,7 @@ WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    FASTEMBED_CACHE_PATH=/opt/huggingface/fastembed \
     HF_HOME=/opt/huggingface \
     UV_LINK_MODE=copy
 
@@ -19,6 +20,8 @@ RUN python -c "from faster_whisper.utils import download_model; download_model('
 ENV HF_HUB_OFFLINE=1
 
 COPY backend /app/backend
+RUN cd /app/backend && HF_HUB_OFFLINE=0 python -c "from embeddings.e5 import embed_query; embed_query('model warmup')" \
+    && chmod -R a+rX "$FASTEMBED_CACHE_PATH"
 WORKDIR /app/backend
 USER 10001:10001
 EXPOSE 8000

@@ -147,8 +147,7 @@ identity has permission to enable the extension before applying it.
 
 The first migration creates tables and enables pgvector, but does not yet wire
 request handlers, authentication, embedding inference, or answer-cache lookup.
-Those are the next backend stages. The current anonymous audio endpoint remains
-unchanged; do not associate uploaded audio with a user until verified auth is added.
+Chat, conversation history, and assistant audio use the verified Cognito account. The older audio and agent helper endpoints also require authentication.
 
 Run the backend tests after installing dependencies:
 
@@ -166,8 +165,8 @@ Frontend `.env.local`:
 ```dotenv
 VITE_COGNITO_REGION=ap-south-1
 VITE_COGNITO_USER_POOL_ID=ap-south-1_qxfax5y4B
-VITE_COGNITO_CLIENT_ID=3o9dcghf8vagog0c24jpih5l8r
-VITE_API_BASE_URL=/api/v1
+VITE_COGNITO_CLIENT_ID=6ltn4ni5clgd6b939epjcv78bh
+VITE_API_BASE_URL=http://localhost:8000/api/v1
 ```
 
 Backend `.env`:
@@ -175,20 +174,16 @@ Backend `.env`:
 ```dotenv
 COGNITO_REGION=ap-south-1
 COGNITO_USER_POOL_ID=ap-south-1_qxfax5y4B
-COGNITO_CLIENT_ID=3o9dcghf8vagog0c24jpih5l8r
+COGNITO_CLIENT_ID=6ltn4ni5clgd6b939epjcv78bh
 ```
 
-The frontend uses the AWS Cognito Identity Provider SDK directly for email/password
-sign-up, email confirmation, sign-in, forgot-password and password reset. It sends
+The frontend uses Cognito for email sign-up, confirmation, and password reset.
+Sign-in uses the Cognito SRP client. The frontend sends
 the resulting Cognito ID token to `POST /api/v1/auth/cognito`. FastAPI verifies the
 JWT signature against the User Pool JWKS, issuer, app-client audience, token_use,
 expiry and verified email before creating/updating the local account.
 
-The app client must be a **public client with no client secret**. Enable the
-`USER_PASSWORD_AUTH` authentication flow (AWS console app client authentication
-flows / ALLOW_USER_PASSWORD_AUTH) because the development frontend calls
-`InitiateAuth` with `USER_PASSWORD_AUTH`. Keep self-registration and email
-verification enabled in the User Pool. SMS/MFA is not required for this dev setup.
+Use a public app client with `ALLOW_USER_SRP_AUTH` enabled. Keep self-registration and email verification enabled in the User Pool. The current development UI handles email verification and password reset.
 
 Do not put AWS access keys or a client secret in the frontend. The Cognito app
 client ID and User Pool ID are identifiers, not secrets. Configure real values in
@@ -206,7 +201,4 @@ npm run dev
 uv sync
 ```
 
-Legacy Google verifier files may remain for reference, but the active auth router
-and protected-route dependency now use Cognito. Existing Google-only accounts are
-not automatically linked to Cognito accounts; this is a development migration
-and account linking should be designed before production.
+The active authentication router and protected-route dependency both use Cognito. Existing Google-only accounts require a separate account-linking migration.
