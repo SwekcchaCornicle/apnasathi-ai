@@ -1,10 +1,13 @@
 """Authenticated chat orchestration: history -> semantic cache -> Gemini fallback."""
 from datetime import datetime, timezone
 import re
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,10 +19,11 @@ from llm_model.classify_intent_action import intent_action
 from llm_model.llm_model import VertexUnavailable, vertex_model
 from services.answer_reuse import find_reusable_answer, normalize_question, store_approved_answer
 from api.persistence import require_supported_language
+from storage.s3_audio_storage import AudioStorageError, validate_audio
 
 router = APIRouter(tags=["assistant"])
 AUTO_CACHE_MIN_CONFIDENCE = 0.90
-ACTION_REQUEST = re.compile(r"\b(open|launch|call|phone|send|message|text|post|upload|share|order|buy|purchase|book|play|watch|navigate|install|delete|cancel)\b|(खोलो|खोलना|कॉल|फोन|भेजो|मैसेज|पोस्ट|ऑर्डर|मंगाओ|खरीदो|चलाओ|देखो)", re.IGNORECASE)
+ACTION_REQUEST = re.compile(r"\b(use|open|launch|call|phone|send|message|text|post|upload|share|order|buy|purchase|book|play|watch|navigate|install|delete|cancel)\b|(खोलो|खोलना|कॉल|फोन|भेजो|मैसेज|पोस्ट|ऑर्डर|मंगाओ|खरीदो|चलाओ|देखो)", re.IGNORECASE)
 
 def is_action_request(message: str) -> bool:
     return bool(ACTION_REQUEST.search(message))
@@ -113,9 +117,13 @@ def assistant_chat(
             raise HTTPException(status_code=502, detail="The AI returned no structured response.")
         intent = classified.intent
         language = require_supported_language(classified.response_language if classified.response_language and classified.response_language != "und" else language)
-        action = intent_action(classified)
-        response_text = action.get("response") or classified.response
-        requires_confirmation = bool(action.get("requires_confirmation", classified.requires_confirmation))
+        if intent in {"GENERAL_QUESTION", "GENERAL_CONVERSATION", "GREETING"}:
+            response_text = classified.response
+            requires_confirmation = False
+        else:
+            action = intent_action(classified)
+            response_text = action.get("response") or classified.response
+            requires_confirmation = bool(action.get("requires_confirmation", classified.requires_confirmation))
 
         # Cache only high-confidence, stable informational answers for this user.
         # Never cache action intents, transient results, or general conversation.
@@ -173,4 +181,37 @@ def assistant_chat(
         source=source,
         similarity=similarity,
         requires_confirmation=requires_confirmation,
+    )
+
+@router.post("/assistant/audio", response_model=AssistantChatResponse)
+def assistant_audio(
+    conversation_id: UUID,
+    audio: UploadFile = File(...),
+    user: Annotated[User, Depends(get_current_user)] = None,
+    db: Annotated[Session, Depends(get_db)] = None,
+):
+    """Authenticated voice chat, using the same persistence and semantic lookup flow."""
+    try:
+        validate_audio(audio.file, audio.content_type)
+    except AudioStorageError as error:
+        raise HTTPException(error.status, str(error)) from None
+
+    with tempfile.TemporaryDirectory(prefix="apnasathi-chat-") as directory:
+        audio_path = Path(directory) / "recording"
+        with audio_path.open("wb") as target:
+            shutil.copyfileobj(audio.file, target)
+        try:
+            from app import transcribe_audio
+            transcription = transcribe_audio(audio_path, strip=True)
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=503, detail="Audio transcription is temporarily unavailable.") from None
+
+    if not transcription:
+        raise HTTPException(status_code=422, detail="No speech was detected. Please try again.")
+    return assistant_chat(
+        AssistantChatRequest(conversation_id=conversation_id, message=transcription),
+        user,
+        db,
     )
