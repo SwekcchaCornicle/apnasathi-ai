@@ -11,6 +11,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
+COPY backend/requirements.txt /tmp/backend-requirements.txt
+RUN uv pip install --no-cache -r /tmp/backend-requirements.txt
 # Bundle the existing Whisper model so the ECS task can start without reaching Hugging Face.
 RUN python -c "from faster_whisper.utils import download_model; download_model('base')" \
     && chmod -R a+rX "$HF_HOME"

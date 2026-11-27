@@ -100,3 +100,58 @@ Before exposing the audio upload API publicly, add authentication and rate
 limiting. Confirm the pinned RDS engine version is offered in the target region.
 
 See [AWS deployment and Vertex authentication](../docs/aws-deployment.md) for rollout and federation setup.
+
+
+## PostgreSQL persistence foundation
+
+The backend database layer uses the existing private RDS PostgreSQL instance,
+SQLAlchemy 2.x, psycopg 3, Alembic, and the PostgreSQL pgvector extension.
+The schema is tenant-aware: private memories and answer embeddings belong to
+one user; shared embeddings are explicitly marked shared and cannot carry a
+user ID. Do not put user-specific data in shared knowledge.
+
+### Local setup
+
+Install the backend database dependencies (in addition to the project runtime):
+
+```powershell
+uv pip install -r backend/requirements.txt
+```
+
+Create a local PostgreSQL database with pgvector installed, copy
+`backend/.env.example` values into your shell or local environment, then run:
+
+```powershell
+$env:DATABASE_URL = "postgresql+psycopg://apnasathi:password@localhost:5432/apnasathi"
+$env:DB_SSL = "false"
+uv run --no-sync alembic -c backend/alembic.ini upgrade head
+```
+
+For ECS, the task already receives `DB_HOST`, `DB_PORT`, `DB_NAME`, and the
+RDS JSON secret in `DATABASE_CREDENTIALS`. The SQLAlchemy layer reads those
+values and requires TLS by default. Never put the RDS password in source control.
+The first migration runs `CREATE EXTENSION IF NOT EXISTS vector`; verify that
+the selected RDS PostgreSQL engine supports pgvector and that the migration
+identity has permission to enable the extension before applying it.
+
+### Tables created
+
+- `users` and `user_profiles`: provider identity and editable preferences.
+- `conversations` and `messages`: durable chat history.
+- `search_history`: each user's past queries and retrieval source.
+- `memories`: explicit user facts/preferences with confidence and optional expiry.
+- `knowledge_embeddings`: private or shared Q&A, multilingual 768-dimension vectors,
+  model identifier, quality score, active flag, and reuse count.
+- `agent_executions`: audit trail for agent/action outcomes; action executions
+  must not be replayed from semantic answer cache.
+
+The first migration creates tables and enables pgvector, but does not yet wire
+request handlers, authentication, embedding inference, or answer-cache lookup.
+Those are the next backend stages. The current anonymous audio endpoint remains
+unchanged; do not associate uploaded audio with a user until verified auth is added.
+
+Run the backend tests after installing dependencies:
+
+```powershell
+uv run --no-sync python -m unittest discover -s backend/tests -v
+```
