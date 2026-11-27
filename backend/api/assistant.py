@@ -1,5 +1,6 @@
 """Authenticated chat orchestration: history -> semantic cache -> Gemini fallback."""
 from datetime import datetime, timezone
+import re
 from typing import Annotated
 from uuid import UUID
 
@@ -18,6 +19,10 @@ from api.persistence import require_supported_language
 
 router = APIRouter(tags=["assistant"])
 AUTO_CACHE_MIN_CONFIDENCE = 0.90
+ACTION_REQUEST = re.compile(r"\b(open|launch|call|phone|send|message|text|post|upload|share|order|buy|purchase|book|play|watch|navigate|install|delete|cancel)\b|(खोलो|खोलना|कॉल|फोन|भेजो|मैसेज|पोस्ट|ऑर्डर|मंगाओ|खरीदो|चलाओ|देखो)", re.IGNORECASE)
+
+def is_action_request(message: str) -> bool:
+    return bool(ACTION_REQUEST.search(message))
 
 
 class AssistantChatRequest(BaseModel):
@@ -75,7 +80,7 @@ def assistant_chat(
     intent = "GENERAL_QUESTION"
     requires_confirmation = False
     try:
-        match = find_reusable_answer(
+        match = None if is_action_request(question) else find_reusable_answer(
             db,
             user_id=user.id,
             question=question,
@@ -107,7 +112,7 @@ def assistant_chat(
         if classified is None:
             raise HTTPException(status_code=502, detail="The AI returned no structured response.")
         intent = classified.intent
-        language = require_supported_language(classified.response_language or language)
+        language = require_supported_language(classified.response_language if classified.response_language and classified.response_language != "und" else language)
         action = intent_action(classified)
         response_text = action.get("response") or classified.response
         requires_confirmation = bool(action.get("requires_confirmation", classified.requires_confirmation))
