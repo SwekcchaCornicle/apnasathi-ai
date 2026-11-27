@@ -67,6 +67,7 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             assert data["ChallengeResponses"]["PASSWORD_CLAIM_SIGNATURE"]
             result = {"AuthenticationResult": {"IdToken": token, "AccessToken": token, "RefreshToken": "fixture"}}
         elif target == "SignUp":
+            assert {item["Name"]: item["Value"] for item in data["UserAttributes"]} == {"name": "QA Fixture", "email": "qa@example.test"}
             result = {"UserConfirmed": False, "UserSub": "fixture"}
         else:
             result = {}
@@ -148,7 +149,12 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
         page.get_by_role("button", name="Continue").click()
         page.get_by_role("button", name="Create account", exact=True).click()
         page.locator('input[type="email"]').fill("qa@example.test")
+        page.get_by_label("Full name").fill("   ")
         page.locator('input[type="password"]').fill("Fixture-only-123!")
+        page.get_by_role("button", name="Create account", exact=True).click()
+        expect(page.get_by_role("status")).to_have_text("Enter your full name.")
+        assert cognito_requests == []
+        page.get_by_label("Full name").fill("  QA Fixture  ")
         page.get_by_role("button", name="Create account", exact=True).click()
         page.get_by_placeholder("Enter code from email").fill("123456")
         page.get_by_role("button", name="Verify email").click()

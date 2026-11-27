@@ -169,3 +169,13 @@ No image push or AWS modification occurs during these checks.
 The HTTP ALB is suitable for development health checks. Browser microphone
 capture on a public origin and the existing Instagram callback need HTTPS.
 S3 transport and outbound calls to Google and Meta still use HTTPS.
+
+## Hosted frontend and sign-in
+
+Build the hosted frontend with `VITE_API_BASE_URL=/api/v1` and the public Cognito region, user pool ID and app client ID for the target environment. Set the build variables explicitly so the developer's ignored `.env.local` cannot select localhost for the hosted build.
+
+Serve the built assets over HTTPS. On the same hostname, route `/api/v1/*` to the backend and serve `index.html` for client routes such as `/record`. Keep the backend API path prefix intact. The development ALB currently accepts HTTP, so terminate TLS at the hosting edge before forwarding to the ALB.
+
+Set the GitHub environment variables `COGNITO_USER_POOL_ID` and `COGNITO_CLIENT_ID` to the same public identifiers used in the frontend. The infrastructure workflow forwards them into the ECS container. The public client needs SRP and permission to write the `name` attribute at signup. The running task needs network access to the Cognito JWKS endpoint.
+
+Before enabling browser traffic, run `python -m alembic -c backend/alembic.ini upgrade head` from the repository root in a controlled migration runner with the intended RDS connection, private-subnet connectivity and permission to create the vector extension. Then verify HTTPS health, signup and email confirmation, sign-in, profile creation, and chat persistence with a development account.

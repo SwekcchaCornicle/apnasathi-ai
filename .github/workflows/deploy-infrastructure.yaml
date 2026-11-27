@@ -49,6 +49,8 @@ jobs:
           GOOGLE_PROJECT: ${{ vars.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_LOCATION: ${{ vars.GOOGLE_CLOUD_LOCATION }}
           WIF_SECRET_ARN: ${{ vars.GOOGLE_WIF_SECRET_ARN }}
+          COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID }}
+          COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
           NETWORK_EGRESS: ${{ vars.NETWORK_EGRESS }}
           HTTPS_PROXY_URL: ${{ vars.BACKEND_HTTPS_PROXY }}
           BASELINE_IMAGE_TAG: ${{ vars.BACKEND_IMAGE_TAG }}
@@ -65,6 +67,13 @@ jobs:
           context=(-c "networkEgress=${NETWORK_EGRESS:-none}")
           if [[ -n "$GOOGLE_PROJECT" || -n "$WIF_SECRET_ARN" ]]; then
             context+=(-c "googleCloudProject=$GOOGLE_PROJECT" -c "googleWifSecretArn=$WIF_SECRET_ARN" -c "googleCloudLocation=${GOOGLE_LOCATION:-global}")
+          fi
+          if [[ -n "$COGNITO_USER_POOL_ID" || -n "$COGNITO_CLIENT_ID" || "$BASELINE_DESIRED_COUNT" != "0" ]]; then
+            if [[ -z "$COGNITO_USER_POOL_ID" || -z "$COGNITO_CLIENT_ID" ]]; then
+              echo "::error::Set COGNITO_USER_POOL_ID and COGNITO_CLIENT_ID for the hosted backend."
+              exit 1
+            fi
+            context+=(-c "cognitoUserPoolId=$COGNITO_USER_POOL_ID" -c "cognitoClientId=$COGNITO_CLIENT_ID")
           fi
           if [[ -n "$HTTPS_PROXY_URL" ]]; then context+=(-c "backendHttpsProxy=$HTTPS_PROXY_URL"); fi
           if [[ -n "$BASELINE_IMAGE_TAG" ]]; then context+=(-c "backendImageTag=$BASELINE_IMAGE_TAG"); fi

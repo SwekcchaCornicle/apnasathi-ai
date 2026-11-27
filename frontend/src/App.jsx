@@ -53,6 +53,7 @@ function LanguageStep({ selected, onSelect, onContinue }) {
 
 function LoginStep({ selected, onBack, onSignIn }) {
   const [mode, setMode] = useState('login')
+  const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -72,7 +73,18 @@ function LoginStep({ selected, onBack, onSignIn }) {
     setBusy(true)
     try {
       if (mode === 'signup') {
-        await cognito.send(new SignUpCommand({ ClientId: clientId, Username: email.trim().toLowerCase(), Password: password, UserAttributes: [{ Name: 'email', Value: email.trim().toLowerCase() }] }))
+        const name = fullName.trim()
+        if (!name) { setNotice('Enter your full name.'); return }
+        const emailAddress = email.trim().toLowerCase()
+        await cognito.send(new SignUpCommand({
+          ClientId: clientId,
+          Username: emailAddress,
+          Password: password,
+          UserAttributes: [
+            { Name: 'email', Value: emailAddress },
+            { Name: 'name', Value: name },
+          ],
+        }))
         setMode('confirm')
         setNotice('We sent a verification code to your email address.')
       } else if (mode === 'confirm') {
@@ -113,6 +125,10 @@ function LoginStep({ selected, onBack, onSignIn }) {
       <h2 className="form-title">{heading}</h2>
       <p className="form-description">Sign in securely to keep your conversations and personal guidance together.</p>
       <form className="cognito-form" onSubmit={submit}>
+        {mode === 'signup' && <>
+          <label htmlFor="account-name">Full name</label>
+          <input id="account-name" type="text" autoComplete="name" required value={fullName} onChange={(event) => setFullName(event.target.value)} />
+        </>}
         <label htmlFor="account-email">Email address</label>
         <input id="account-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" disabled={mode === 'confirm' || mode === 'reset'} />
         {['signup','login'].includes(mode) && <><label htmlFor="account-password">Password</label><input id="account-password" type="password" required minLength={8} autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" /></>}
