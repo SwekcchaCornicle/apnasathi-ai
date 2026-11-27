@@ -1,4 +1,5 @@
 """Verify Amazon Cognito User Pool ID tokens."""
+import logging
 import os
 from functools import lru_cache
 from typing import Any
@@ -6,6 +7,8 @@ from typing import Any
 import jwt
 from fastapi import HTTPException
 from jwt import PyJWKClient
+
+logger = logging.getLogger(__name__)
 
 AWS_REGION = os.getenv("COGNITO_REGION", "ap-south-1")
 USER_POOL_ID = os.getenv("COGNITO_USER_POOL_ID", "ap-south-1_qxfax5y4B")
@@ -32,8 +35,11 @@ def verify_cognito_id_token(encoded_token: str) -> dict[str, Any]:
             issuer=ISSUER,
             options={"require": ["exp", "iat", "sub", "iss", "aud"]},
         )
-    except (jwt.PyJWTError, Exception) as error:
-        # Do not expose token/JWKS internals to clients; log details at the API boundary if needed.
+    except jwt.PyJWKClientConnectionError:
+        logger.warning("Cognito signing key endpoint could not be reached.")
+        raise HTTPException(status_code=503, detail="Cognito verification is temporarily unavailable.") from None
+    except jwt.PyJWTError as error:
+        logger.warning("Cognito token validation rejected the request (%s).", type(error).__name__)
         raise HTTPException(status_code=401, detail="Cognito sign-in token is invalid or expired.") from None
     if claims.get("token_use") != "id" or not claims.get("sub"):
         raise HTTPException(status_code=401, detail="A valid Cognito ID token is required.")
