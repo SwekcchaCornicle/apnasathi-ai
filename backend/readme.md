@@ -251,3 +251,82 @@ user messages, approved answer storage, cache lookup, and Gemini fallback.
 
 Configure the values in `backend/.env.example`. No production migration,
 model download, test run, or deployment was performed as part of this code change.
+
+
+## Stage 3: authenticated user history and memory
+
+The authenticated persistence API connects data to the verified Google user ID.
+The API never accepts a caller-supplied user ID for ownership. Every query for
+conversations, messages, search history and memories filters by the authenticated
+user. Existing tables are provisioned by the Stage 1 Alembic migration.
+
+### Supported languages
+
+ApnaSathi currently supports exactly two language choices:
+
+- `en` — English
+- `hi` — Hindi
+
+The language selector is `POST /api/v1/users/me/language` with
+`{"language":"hi"}` or `{"language":"en"}`. For any other language the API
+returns `supported: false` and the message:
+
+> We're about to launch support for this language. For now, please choose Hindi or English.
+
+Unsupported language choices are not saved. Conversation creation, message
+creation, search history, and profile updates also reject unsupported languages.
+If a language is omitted, the user's saved preference is used (English if no
+preference has been selected). Regional forms such as `hi-IN` normalize to
+`hi` and `en-IN` to `en`.
+
+### Endpoints (all require a Google ID token bearer header)
+
+- `POST /api/v1/users/me/language` — select English or Hindi; returns launch notice for other languages.
+- `POST /api/v1/conversations` — create a conversation, defaulting to profile language.
+- `GET /api/v1/conversations` — list only the signed-in user's conversations.
+- `GET /api/v1/conversations/{id}/messages` — list messages after ownership verification.
+- `POST /api/v1/conversations/{id}/messages` — append a user message.
+- `POST /api/v1/search-history` and `GET /api/v1/search-history` — record and list searches.
+- `POST /api/v1/memories` and `GET /api/v1/memories` — create and list user-approved facts/preferences.
+- `DELETE /api/v1/memories/{id}` — deactivate a memory owned by the signed-in user.
+- Trusted backend orchestration can call `persist_assistant_message()` to save assistant replies; there is no public endpoint that lets clients impersonate assistant messages.
+
+### Example: create a conversation
+
+```http
+POST /api/v1/conversations
+Authorization: Bearer <Google ID token>
+Content-Type: application/json
+
+{"title":"My first chat","channel":"chat","language":"hi"}
+```
+
+### Example: unsupported language
+
+```http
+POST /api/v1/users/me/language
+Authorization: Bearer <Google ID token>
+Content-Type: application/json
+
+{"language":"bn"}
+```
+
+Response:
+
+```json
+{
+  "supported": false,
+  "language": null,
+  "message": "We're about to launch support for this language. For now, please choose Hindi or English.",
+  "supported_languages": ["en", "hi"]
+}
+```
+
+Messages and memories are private to the account. Memory creation is explicit;
+this stage does not automatically infer/store personal facts from raw messages.
+The memory delete endpoint deactivates the record rather than hard-deleting it,
+so it is excluded from future reads. Add a retention/purge policy before production.
+
+This stage exposes persistence APIs and trusted helper functions. Existing
+voice/agent endpoints are not yet fully connected to conversation persistence
+or semantic lookup. That orchestration wiring remains a final integration task.
