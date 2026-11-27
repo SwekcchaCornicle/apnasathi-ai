@@ -28,7 +28,7 @@ def require_supported_language(language: str) -> str:
 class ConversationCreate(BaseModel):
     title: str | None = Field(default=None, max_length=200)
     channel: str = Field(default="chat", min_length=1, max_length=32)
-    language: str = Field(default="en", min_length=2, max_length=16)
+    language: str | None = Field(default=None, min_length=2, max_length=16)
 
 
 class ConversationResponse(BaseModel):
@@ -128,7 +128,7 @@ def select_language(payload: LanguageSelection, user: Annotated[User, Depends(ge
 
 @router.post("/conversations", response_model=ConversationResponse, status_code=201)
 def create_conversation(payload: ConversationCreate, user: Annotated[User, Depends(get_current_user)], db: Annotated[Session, Depends(get_db)]):
-    language = require_supported_language(payload.language)
+    language = require_supported_language(payload.language or (user.profile.preferred_language if user.profile else "en"))
     conversation = Conversation(user_id=user.id, title=payload.title, channel=payload.channel, language=language)
     db.add(conversation)
     db.flush()
@@ -163,7 +163,7 @@ def add_user_message(conversation_id: UUID, payload: MessageCreate, user: Annota
 
 @router.post("/search-history", response_model=SearchResponse, status_code=201)
 def record_search(payload: SearchCreate, user: Annotated[User, Depends(get_current_user)], db: Annotated[Session, Depends(get_db)]):
-    language = require_supported_language(payload.language) if payload.language else None
+    language = require_supported_language(payload.language or (user.profile.preferred_language if user.profile else "en"))
     if payload.conversation_id is not None:
         _owned_conversation(db, user.id, payload.conversation_id)
     record = SearchHistory(user_id=user.id, conversation_id=payload.conversation_id, query=payload.query.strip(), normalized_query=normalize_question(payload.query), intent=payload.intent, language=language, result_source=payload.result_source)
