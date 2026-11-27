@@ -4,7 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
@@ -22,6 +22,16 @@ class GoogleSignInRequest(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
+    @field_validator("preferred_language")
+    @classmethod
+    def supported_language_only(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        normalized = value.strip().lower().replace("_", "-").split("-")[0]
+        if normalized not in {"en", "hi"}:
+            raise ValueError("We're about to launch support for this language. For now, please choose Hindi or English.")
+        return normalized
+
     display_name: str | None = Field(default=None, max_length=120)
     preferred_language: str | None = Field(default=None, min_length=2, max_length=16)
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
