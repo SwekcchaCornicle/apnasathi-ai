@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import ChatWorkspace from './ChatWorkspace.jsx'
 
 const languages = [
@@ -97,18 +97,19 @@ function LoginStep({ selected, onBack, onSignIn }) {
 
 function App() {
   const [step, setStep] = useState('language')
-  const [selectedLanguage, setSelectedLanguage] = useState('English')
-  const [googleToken, setGoogleToken] = useState(() => localStorage.getItem('apnasathiGoogleToken') || '')
+  const [selectedLanguage, setSelectedLanguage] = useState(() => sessionStorage.getItem('apnasathiLanguage') || 'English')
+  const [googleToken, setGoogleToken] = useState(() => sessionStorage.getItem('apnasathiGoogleToken') || '')
   const [page, setPage] = useState(() => (
-    window.location.pathname === '/record' && localStorage.getItem('apnasathiSignedIn') === 'true'
+    window.location.pathname === '/record' && Boolean(sessionStorage.getItem('apnasathiGoogleToken'))
       ? 'recorder'
       : 'welcome'
   ))
 
   useEffect(() => {
     function handleHistoryChange() {
-      const signedIn = localStorage.getItem('apnasathiSignedIn') === 'true'
+      const signedIn = Boolean(sessionStorage.getItem('apnasathiGoogleToken'))
       setPage(window.location.pathname === '/record' && signedIn ? 'recorder' : 'welcome')
+      if (signedIn) setGoogleToken(sessionStorage.getItem('apnasathiGoogleToken') || '')
     }
 
     window.addEventListener('popstate', handleHistoryChange)
@@ -121,16 +122,26 @@ function App() {
     setPage(nextPage)
   }
 
-  const signIn = useCallback((credential) => {
-    localStorage.setItem('apnasathiGoogleToken', credential)
-    localStorage.setItem('apnasathiSignedIn', 'true')
-    setGoogleToken(credential)
-    navigate('recorder')
-  }, [])
+  const signIn = useCallback(async (credential) => {
+    try {
+      const base = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+      const response = await fetch(`${base}/auth/google`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id_token: credential }) })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data?.detail || 'Google sign-in failed. Please try again.')
+      const language = selectedLanguage === 'Hindi' ? 'hi' : 'en'
+      const profile = await fetch(`${base}/users/me/profile`, { method: 'PATCH', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ preferred_language: language }) })
+      if (!profile.ok) throw new Error('Signed in, but we could not save your language preference.')
+      sessionStorage.setItem('apnasathiGoogleToken', credential)
+      sessionStorage.setItem('apnasathiLanguage', selectedLanguage)
+      setGoogleToken(credential)
+      navigate('recorder')
+    } catch (error) { window.alert(error.message) }
+  }, [selectedLanguage])
 
   function signOut() {
     localStorage.removeItem('apnasathiSignedIn')
-    localStorage.removeItem('apnasathiGoogleToken')
+    sessionStorage.removeItem('apnasathiGoogleToken')
+    sessionStorage.removeItem('apnasathiLanguage')
     setGoogleToken('')
     setStep('login')
     navigate('welcome')
