@@ -45,6 +45,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
   const [busy, setBusy] = useState(false)
   const [recording, setRecording] = useState(false)
   const [notice, setNotice] = useState('')
+  const [historySearch, setHistorySearch] = useState('')
   const [loading, setLoading] = useState(true)
   const scrollRef = useRef(null)
   const recorderRef = useRef(null)
@@ -196,6 +197,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
   }, [])
 
   const activeConversation = useMemo(() => conversations.find((item) => item.id === activeId), [conversations, activeId])
+  const visibleGroups = useMemo(() => grouped.map((group) => ({ ...group, conversations: group.conversations.filter((conversation) => `${conversation.title || ''} ${conversation.summary}`.toLowerCase().includes(historySearch.toLowerCase())) })).filter((group) => group.conversations.length), [grouped, historySearch])
 
   return (
     <main className="chat-app">
@@ -257,9 +259,10 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
         <aside className="intent-drawer" onClick={(event) => event.stopPropagation()} aria-label="Your conversations">
           <div className="drawer-header"><div><span className="chat-eyebrow">YOUR HISTORY</span><h2>Conversations</h2></div><button className="drawer-close" onClick={() => setDrawerOpen(false)} type="button" aria-label="Close sidebar">×</button></div>
           <button className="drawer-new-chat" type="button" onClick={newConversation}>＋ Start a new chat</button>
+          <input className="history-search" value={historySearch} onChange={(event) => setHistorySearch(event.target.value)} placeholder="Search your conversations…" aria-label="Search conversation history" />
           <div className="intent-groups">
-            {grouped.length === 0 && <p className="drawer-empty">Your previous chats will appear here, organised by what you asked ApnaSathi to do.</p>}
-            {grouped.map((group) => <section className="intent-group" key={group.id}>
+            {visibleGroups.length === 0 && <p className="drawer-empty">Your previous chats will appear here, organised by what you asked ApnaSathi to do.</p>}
+            {visibleGroups.map((group) => <section className="intent-group" key={group.id}>
               <h3><span>{group.icon}</span>{group.label}<small>{group.conversations.length}</small></h3>
               {group.conversations.map((conversation) => <button className={`history-item ${activeId === conversation.id ? 'history-item-active' : ''}`} key={conversation.id} type="button" onClick={() => void openConversation(conversation)}>
                 <strong>{conversation.title || group.label}</strong><span>{conversation.summary}</span><time>{new Date(conversation.updated_at).toLocaleDateString()}</time>
