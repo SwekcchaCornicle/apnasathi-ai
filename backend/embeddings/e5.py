@@ -13,7 +13,7 @@ EXPECTED_DIMENSIONS = 768
 @lru_cache(maxsize=1)
 def _model() -> TextEmbedding:
     """Load model lazily so app startup does not download weights or block health checks."""
-    return TextEmbedding(model_name=MODEL_NAME)
+    return TextEmbedding(model_name=MODEL_NAME, cache_dir=os.getenv("FASTEMBED_CACHE_PATH"))
 
 
 def _normalize(vector: Iterable[float]) -> list[float]:
