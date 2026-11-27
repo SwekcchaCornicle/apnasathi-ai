@@ -201,3 +201,6 @@ h1 em, .form-title em { color: #d3b28a; font-weight: 400; }
  .chat-empty-state h2 { font-size:21px; }.suggestion-row { flex-direction:column; width:100%; max-width:260px; }.suggestion-row button { text-align:left; }
  .chat-composer { gap:6px; padding:8px; }.chat-composer textarea { min-height:42px; padding:12px 6px; font-size:12px; }.mic-button,.send-button { width:39px; height:39px; flex-basis:39px; }
 }
+
+.history-search { width:100%; margin:7px 0 10px; border:1px solid #e5e5dc; border-radius:8px; outline:0; padding:10px 12px; color:#394337; background:#fffefa; font-size:11px; }
+.history-search:focus { border-color:#899982; box-shadow:0 0 0 3px #8999821c; }
