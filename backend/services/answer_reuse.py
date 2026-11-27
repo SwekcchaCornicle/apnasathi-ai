@@ -3,7 +3,6 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
-from typing import Sequence
 
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -28,7 +27,7 @@ class ReusableAnswer:
 
 
 def normalize_question(question: str) -> str:
-    return re.sub(r"\\s+", " ", question).strip().casefold()
+    return re.sub(r"\s+", " ", question).strip().casefold()
 
 
 def _threshold() -> float:
@@ -117,7 +116,7 @@ def store_approved_answer(
     if not MIN_QUALITY_SCORE <= quality_score <= 1.0:
         raise ValueError(f"quality_score must be between {MIN_QUALITY_SCORE} and 1.0.")
     normalized = normalize_question(question)
-    embedding = embed_passage(f"Question: {normalized}\\nAnswer: {answer.strip()}")
+    embedding = embed_passage(f"Question: {normalized}\nAnswer: {answer.strip()}")
     record = KnowledgeEmbedding(
         user_id=user_id,
         source_message_id=source_message_id,
