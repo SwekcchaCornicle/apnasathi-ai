@@ -7,12 +7,15 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HF_HOME=/opt/huggingface \
+    FASTEMBED_CACHE_PATH=/opt/fastembed \
     UV_LINK_MODE=copy
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY backend/requirements.txt /tmp/backend-requirements.txt
-RUN uv pip install --no-cache -r /tmp/backend-requirements.txt
+RUN uv pip install --no-cache -r /tmp/backend-requirements.txt \
+    && python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='intfloat/multilingual-e5-base', cache_dir='/opt/fastembed')" \
+    && chmod -R a+rX /opt/fastembed
 # Bundle the existing Whisper model so the ECS task can start without reaching Hugging Face.
 RUN python -c "from faster_whisper.utils import download_model; download_model('base')" \
     && chmod -R a+rX "$HF_HOME"
