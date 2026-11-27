@@ -188,10 +188,10 @@ def assistant_chat(
 
 @router.post("/assistant/audio", response_model=AssistantChatResponse)
 def assistant_audio(
+    user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
     conversation_id: UUID,
     audio: UploadFile = File(...),
-    user: Annotated[User, Depends(get_current_user)] = None,
-    db: Annotated[Session, Depends(get_db)] = None,
 ):
     """Authenticated voice chat, using the same persistence and semantic lookup flow."""
     try:
