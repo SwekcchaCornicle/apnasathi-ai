@@ -112,7 +112,30 @@ def assistant_chat(
         try:
             now = datetime.now(timezone.utc)
             memory_rows = db.scalars(select(Memory).where(Memory.user_id == user.id, Memory.is_active.is_(True), or_(Memory.expires_at.is_(None), Memory.expires_at > now)).order_by(Memory.updated_at.desc()).limit(20))
-            user_context = "; ".join(f"{memory.category}/{memory.memory_key}: {memory.memory_value}" for memory in memory_rows)[:4000]
+            memory_context = "; ".join(
+                f"{memory.category}/{memory.memory_key}: {memory.memory_value}"
+                for memory in memory_rows
+            )
+            # Use only this account’s previous shopping messages as private context.
+            previous_shopping = db.scalars(
+                select(Message)
+                .where(
+                    Message.user_id == user.id,
+                    Message.intent == "ORDER_GROCERIES",
+                    Message.role.in_({"user", "assistant"}),
+                )
+                .order_by(Message.created_at.desc())
+                .limit(12)
+            ).all()
+            shopping_context = " | ".join(
+                f"{item.role}: {item.content}" for item in reversed(previous_shopping)
+            )
+            context_parts = []
+            if memory_context:
+                context_parts.append(f"Saved user memories: {memory_context}")
+            if shopping_context:
+                context_parts.append(f"Recent shopping conversation history: {shopping_context}")
+            user_context = "\\n".join(context_parts)[:6000]
             classified = vertex_model(question, user_context=user_context, preferred_language=language)
         except VertexUnavailable:
             raise HTTPException(status_code=503, detail="The AI service is temporarily unavailable.") from None
