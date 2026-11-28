@@ -8,13 +8,15 @@ branch_labels=None
 depends_on=None
 
 def upgrade():
+    op.add_column("user_profiles", sa.Column("whatsapp_phone", sa.String(20), nullable=True))
     u=postgresql.UUID(as_uuid=True); j=postgresql.JSONB()
     op.create_table("google_calendar_credentials", sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),primary_key=True), sa.Column("refresh_token_encrypted",sa.Text(),nullable=False), sa.Column("connected_at",sa.DateTime(timezone=True),server_default=sa.func.now(),nullable=False))
     op.create_table("google_oauth_states", sa.Column("state_hash",sa.String(64),primary_key=True), sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False), sa.Column("expires_at",sa.DateTime(timezone=True),nullable=False), sa.Column("used_at",sa.DateTime(timezone=True)))
     op.create_table("daily_actions",sa.Column("id",u,primary_key=True),sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False),sa.Column("intent",sa.String(48),nullable=False),sa.Column("payload",j,nullable=False),sa.Column("status",sa.String(24),nullable=False),sa.Column("result",j,nullable=False),sa.Column("created_at",sa.DateTime(timezone=True),server_default=sa.func.now(),nullable=False))
     op.create_index("ix_daily_actions_user_status","daily_actions",["user_id","status"])
-    op.create_table("reminders",sa.Column("id",u,primary_key=True),sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False),sa.Column("title",sa.String(200),nullable=False),sa.Column("scheduled_at",sa.DateTime(timezone=True),nullable=False),sa.Column("timezone",sa.String(64),nullable=False),sa.Column("status",sa.String(20),nullable=False))
+    op.create_table("reminders",sa.Column("id",u,primary_key=True),sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False),sa.Column("title",sa.String(200),nullable=False),sa.Column("scheduled_at",sa.DateTime(timezone=True),nullable=False),sa.Column("timezone",sa.String(64),nullable=False),sa.Column("status",sa.String(20),nullable=False),sa.Column("delivered_at",sa.DateTime(timezone=True)),sa.Column("attempts",sa.Integer(),nullable=False,server_default="0"),sa.Column("next_attempt_at",sa.DateTime(timezone=True)),sa.Column("last_error",sa.String(240)))
     op.create_index("ix_reminders_user_due","reminders",["user_id","status","scheduled_at"])
+    op.create_index("ix_reminders_due_worker","reminders",["status","scheduled_at","next_attempt_at"])
     op.create_table("daily_tasks",sa.Column("id",u,primary_key=True),sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False),sa.Column("title",sa.String(240),nullable=False),sa.Column("priority",sa.String(12),nullable=False),sa.Column("status",sa.String(16),nullable=False),sa.Column("due_at",sa.DateTime(timezone=True)))
     op.create_index("ix_daily_tasks_user_status","daily_tasks",["user_id","status"])
     op.create_table("shopping_lists",sa.Column("id",u,primary_key=True),sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False),sa.Column("name",sa.String(160),nullable=False),sa.Column("items",j,nullable=False),sa.Column("created_at",sa.DateTime(timezone=True),server_default=sa.func.now(),nullable=False))
@@ -25,5 +27,7 @@ def upgrade():
     op.create_table("message_drafts",sa.Column("id",u,primary_key=True),sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False),sa.Column("channel",sa.String(24),nullable=False),sa.Column("recipient",sa.String(160)),sa.Column("body",sa.Text(),nullable=False),sa.Column("created_at",sa.DateTime(timezone=True),server_default=sa.func.now(),nullable=False))
 
 def downgrade():
+    op.drop_column("user_profiles", "whatsapp_phone")
+    op.drop_index("ix_reminders_due_worker", table_name="reminders")
     for table in ("google_oauth_states","google_calendar_credentials","message_drafts","meal_plans","expenses","shopping_lists","daily_tasks","reminders","daily_actions"):
         op.drop_table(table)
