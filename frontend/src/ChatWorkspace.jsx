@@ -40,7 +40,7 @@ function categoryFor(conversation, messages) {
     if (found) return found
   }
   const content = messages.map((message) => message.content).join(' ').toLowerCase()
-  return INTENTS.find((item) => item.terms.some((term) => content.includes(term))) || INTENTS[5]
+  return INTENTS.find((item) => item.terms.some((term) => content.includes(term))) || INTENTS.find((item) => item.id === 'GENERAL_CONVERSATION')
 }
 function summaryFor(messages) {
   const first = messages.find((message) => message.role === 'user')?.content || 'No messages yet'
@@ -302,7 +302,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
           setMessageList((current) => [
             ...current,
             { id: result.user_message_id, role: 'user', content: result.transcription || '🎙️ Voice message', language: result.language },
-            { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback },
+            { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback, daily_actions: result.daily_actions },
           ])
           if (!mountedRef.current) return
           speakReply(result.response, result.language || language)
