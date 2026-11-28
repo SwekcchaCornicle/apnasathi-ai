@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from agents.daily_planner import plan_daily_command
 from auth.dependencies import get_current_user
 from database.daily_models import DailyAction, Reminder, DailyTask, ShoppingList, Expense, MealPlan, MessageDraft
-from database.models import User
+from database.models import User, UserProfile
 from database.session import get_db
 from llm_model.llm_model import VertexUnavailable
 
@@ -144,3 +144,23 @@ def add_draft(data:DraftInput,user:UserDep,db:DbDep):
 @router.get("/message-drafts")
 def drafts(user:UserDep,db:DbDep):
     return [{"id":str(x.id),"channel":x.channel,"recipient":x.recipient,"body":x.body} for x in db.scalars(select(MessageDraft).where(MessageDraft.user_id==user.id).order_by(MessageDraft.created_at.desc()))]
+
+class WhatsAppPhoneInput(BaseModel):
+    phone: str = Field(min_length=8, max_length=20, pattern=r"^\\+[1-9][0-9]{7,14}$")
+
+@router.put("/whatsapp/phone")
+def set_whatsapp_phone(data: WhatsAppPhoneInput, user: UserDep, db: DbDep):
+    profile = db.get(UserProfile, user.id)
+    if profile is None:
+        profile = UserProfile(user_id=user.id, whatsapp_phone=data.phone)
+        db.add(profile)
+    else:
+        profile.whatsapp_phone = data.phone
+    return {"configured": True, "phone": data.phone[-4:].rjust(len(data.phone), "•")}
+
+@router.delete("/whatsapp/phone")
+def clear_whatsapp_phone(user: UserDep, db: DbDep):
+    profile = db.get(UserProfile, user.id)
+    if profile is not None:
+        profile.whatsapp_phone = None
+    return {"configured": False}
