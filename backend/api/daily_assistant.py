@@ -95,6 +95,16 @@ def confirm(action_id: UUID, user: UserDep, db: DbDep):
     elif action.intent=="CREATE_CALENDAR_EVENT":
         if not all(p.get(k) for k in ("title", "start_at", "end_at", "timezone")): raise HTTPException(422,"Calendar title, start, end and timezone are required.")
         try:
+            start_at = datetime.fromisoformat(p["start_at"].replace("Z", "+00:00"))
+            end_at = datetime.fromisoformat(p["end_at"].replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Calendar event times must be valid ISO-8601 values.") from None
+        if start_at.tzinfo is None or end_at.tzinfo is None:
+            raise HTTPException(422, "Calendar event times must include timezone offsets.")
+        if end_at <= start_at:
+            raise HTTPException(422, "Calendar event end must be after its start.")
+        p["start_at"], p["end_at"] = start_at, end_at
+        try:
             event = create_calendar_event(db, user.id, p)
         except GoogleCalendarError as exc:
             raise HTTPException(exc.status_code, str(exc)) from None
