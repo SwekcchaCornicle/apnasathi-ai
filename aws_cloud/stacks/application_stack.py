@@ -42,6 +42,7 @@ class ApplicationStack(Stack):
         instagram_api_version: str | None = None,
         instagram_image_origin: str | None = None,
         whatsapp_secret_arn: str | None = None,
+        google_calendar_secret_arn: str | None = None,
         **kwargs,
     ):
         super().__init__(scope, construct_id, **kwargs)
@@ -195,6 +196,21 @@ class ApplicationStack(Stack):
                     name=env_name, value_from=f"{whatsapp_secret_arn}:{json_key}::",
                 ))
 
+        google_calendar_secrets = []
+        if google_calendar_secret_arn:
+            self.execution_role.add_to_policy(iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"], resources=[google_calendar_secret_arn],
+            ))
+            for env_name, json_key in (
+                ("GOOGLE_CALENDAR_CLIENT_ID", "client_id"),
+                ("GOOGLE_CALENDAR_CLIENT_SECRET", "client_secret"),
+                ("GOOGLE_CALENDAR_REDIRECT_URI", "redirect_uri"),
+                ("GOOGLE_TOKEN_ENCRYPTION_KEY", "token_encryption_key"),
+            ):
+                google_calendar_secrets.append(ecs.CfnTaskDefinition.SecretProperty(
+                    name=env_name, value_from=f"{google_calendar_secret_arn}:{json_key}::",
+                ))
+
         cognito_environment = {}
         if cognito_user_pool and cognito_client_id:
             cognito_environment = {
@@ -260,6 +276,7 @@ class ApplicationStack(Stack):
                         *google_secrets,
                         *instagram_secrets,
                         *whatsapp_secrets,
+                        *google_calendar_secrets,
                         *watchmode_secrets,
                         ecs.CfnTaskDefinition.SecretProperty(
                             name="DATABASE_CREDENTIALS",

@@ -80,6 +80,13 @@ if instagram_secret_json_key and (
     raise ValueError("Set a valid JSON key alongside the Instagram secret ARN.")
 instagram_api_version = app.node.try_get_context("instagramApiVersion")
 
+google_calendar_secret_arn = app.node.try_get_context("googleCalendarSecretArn")
+if google_calendar_secret_arn and not re.fullmatch(
+    rf"arn:aws:secretsmanager:ap-south-1:{env.account or '[0-9]{{12}}'}:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{{6}}",
+    google_calendar_secret_arn,
+):
+    raise ValueError("googleCalendarSecretArn must be a complete Secrets Manager ARN in this AWS account and region.")
+
 whatsapp_secret_arn = app.node.try_get_context("whatsappSecretArn")
 if whatsapp_secret_arn and not re.fullmatch(
     rf"arn:aws:secretsmanager:ap-south-1:{env.account or '[0-9]{{12}}'}:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{{6}}",
@@ -160,6 +167,7 @@ application_stack = ApplicationStack(
     instagram_api_version=instagram_api_version,
     instagram_image_origin=instagram_image_origin,
     whatsapp_secret_arn=whatsapp_secret_arn,
+    google_calendar_secret_arn=google_calendar_secret_arn,
     env=env,
 )
 
