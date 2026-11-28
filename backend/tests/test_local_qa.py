@@ -202,3 +202,17 @@ def test_similar_title_choices_keep_direct_and_search_links():
     ):
         result = watch_show("Intersteler", "en", "Netflix")
     assert [choice["kind"] for choice in result["playback_options"]] == ["ready", "search"]
+
+
+def test_empty_video_search_retries_a_spelling_prefix():
+    from agents.watch_show.watch_show import SimilarTitles, get_streaming_platforms
+    with (
+        patch("agents.watch_show.watch_show.watchmode_headers", return_value={}),
+        patch("agents.watch_show.watch_show.search_titles", side_effect=[
+            [], [{"name": "Interstellar", "id": 1}],
+        ]) as search,
+        pytest.raises(SimilarTitles) as error,
+    ):
+        get_streaming_platforms("Intersteler")
+    assert error.value.matches == [("Interstellar", 1)]
+    assert search.call_args.args[0] == "Interste"

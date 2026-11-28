@@ -76,21 +76,14 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
     """Finds streaming platforms for a given show name and country code (e.g., 'IN', 'US')."""
     headers = watchmode_headers()
 
-    # Step 1: Search for the show by name to get its Watchmode ID
-    search_url = f"{BASE_URL}/search/"
-    search_params = {
-        "search_field": "name",
-        "search_value": show_name,
-        "types": "tv,movie",
-    }
-
     try:
-        search_res = requests.get(
-            search_url, headers=headers, params=search_params, timeout=10
-        )
-        search_res.raise_for_status()
-        results = search_res.json().get("title_results", [])
-
+        results = search_titles(show_name, headers)
+        if not results:
+            prefixes = search_prefixes(show_name)
+            if prefixes:
+                with ThreadPoolExecutor(max_workers=len(prefixes)) as executor:
+                    attempts = executor.map(lambda prefix: search_titles(prefix, headers), prefixes)
+                    results = [result for attempt in attempts for result in attempt]
         if not results:
             raise ValueError(f"No streaming platforms found for '{show_name}'.")
 
@@ -120,6 +113,25 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
             f"Unable to retrieve streaming platforms for '{show_name}'."
         ) from exc
 
+
+
+def search_prefixes(title):
+    words = title.strip().split()
+    if not words:
+        return []
+    shortened = words[-1][:-min(3, max(1, len(words[-1]) // 2))]
+    prefixes = (" ".join([*words[:-1], shortened]).strip(), " ".join(words[:-1]))
+    return list(dict.fromkeys(prefix for prefix in prefixes if len(prefix) >= 4 and prefix != title))
+
+
+def search_titles(title, headers):
+    response = requests.get(
+        f"{BASE_URL}/search/", headers=headers,
+        params={"search_field": "name", "search_value": title, "types": "tv,movie"},
+        timeout=5,
+    )
+    response.raise_for_status()
+    return response.json().get("title_results", [])
 
 
 def title_sources(title_id, title, headers, region):
