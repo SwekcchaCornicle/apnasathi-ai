@@ -88,10 +88,27 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
           DESIRED_COUNT: ${{ steps.current.outputs.desired }}
+          COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID || 'ap-south-1_qxfax5y4B' }}
+          COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID || '6ltn4ni5clgd6b939epjcv78bh' }}
         run: |
           set -euo pipefail
-          jq --arg image "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" '
-            (.containerDefinitions[] | select(.name == "backend") | .image) = $image
+          if [[ ! "$COGNITO_USER_POOL_ID" =~ ^ap-south-1_[a-zA-Z0-9]+$ || ! "$COGNITO_CLIENT_ID" =~ ^[a-zA-Z0-9]{1,128}$ ]]; then
+            echo "::error::Set a valid ap-south-1 Cognito user pool and public client ID."
+            exit 1
+          fi
+          jq --arg image "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            --arg region "$AWS_REGION" --arg pool "$COGNITO_USER_POOL_ID" --arg client "$COGNITO_CLIENT_ID" '
+            (.containerDefinitions[] | select(.name == "backend")) |= (
+              .image = $image
+              | .environment = (
+                [(.environment // [])[] | select(.name != "COGNITO_REGION" and .name != "COGNITO_USER_POOL_ID" and .name != "COGNITO_CLIENT_ID")]
+                + [
+                  {name: "COGNITO_REGION", value: $region},
+                  {name: "COGNITO_USER_POOL_ID", value: $pool},
+                  {name: "COGNITO_CLIENT_ID", value: $client}
+                ]
+              )
+            )
             | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
           ' task-definition.json > new-task-definition.json
           TASK_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
