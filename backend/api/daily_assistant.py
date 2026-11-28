@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from agents.daily_planner import plan_daily_command
 from auth.dependencies import get_current_user
-from database.daily_models import DailyAction, Reminder, DailyTask, ShoppingList, Expense, MealPlan, MessageDraft
+from database.daily_models import DailyAction, Reminder, DailyTask, ShoppingList, Expense, MealPlan, MessageDraft, GoogleCalendarCredential, GoogleOAuthState
 from database.models import User, UserProfile
 from database.session import get_db
 from llm_model.llm_model import VertexUnavailable
