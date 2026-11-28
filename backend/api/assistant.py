@@ -273,6 +273,8 @@ def assistant_chat(
             response_text = action.get("response") or classified.response
             if intent == "WATCH_SHOW" and action.get("playback_url"):
                 playback = {"url": action["playback_url"], "platform": action["playback_platform"], "kind": action["playback_status"]}
+            elif intent == "WATCH_SHOW" and action.get("playback_options"):
+                playback = {"kind": "choices", "options": action["playback_options"]}
             requires_confirmation = bool(action.get("requires_confirmation", classified.requires_confirmation))
 
         # Cache only high-confidence, stable informational answers for this user.

@@ -206,7 +206,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
         { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback },
       ])
       videoOpened = openVideoResult(result, tab)
-      if (result.playback && !videoOpened) setNotice('Use the video link if your browser blocked the new tab.')
+      if (result.playback?.url && !videoOpened) setNotice('Use the video link if your browser blocked the new tab.')
       void refreshConversations().catch(() => {})
     } catch (error) {
       setMessageList((current) => current.filter((item) => !String(item.id).startsWith('pending-')))
@@ -284,7 +284,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
           ])
           if (!mountedRef.current) return
           speakReply(result.response, result.language || language)
-          if (result.playback && !openVideoResult(result)) setNotice('Use the video link if your browser blocked the new tab.')
+          if (result.playback?.url && !openVideoResult(result)) setNotice('Use the video link if your browser blocked the new tab.')
           void refreshConversations().catch(() => {})
         } catch (error) { setNotice(error.message) }
         finally {
@@ -359,8 +359,16 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                   <p>{message.content}</p>
                   {message.playback && (
                     <div className="suggestion-row">
-                      <a className="voice-link" href={message.playback.url} target="_blank" rel="noopener noreferrer">{message.playback.kind === 'search' ? 'Search' : 'Open in'} {message.playback.platform}</a>
-                      {message.id === messageList.at(-1)?.id && !videoGuide && <>
+                      {message.playback.options?.map((option) => (
+                        <a key={option.url} className="voice-link" href={option.url} target="_blank" rel="noopener noreferrer" onClick={(event) => {
+                          if (option.kind === 'ready') {
+                            if (openVideoResult({ intent: 'WATCH_SHOW', playback: option })) event.preventDefault()
+                            void guideVideo(option.platform, 'playing')
+                          }
+                        }}>{option.title}{option.kind === 'search' ? ` · Search ${option.platform}` : ''}</a>
+                      ))}
+                      {message.playback.url && <a className="voice-link" href={message.playback.url} target="_blank" rel="noopener noreferrer">{message.playback.kind === 'search' ? 'Search' : 'Open in'} {message.playback.platform}</a>}
+                      {message.playback.kind === 'ready' && message.id === messageList.at(-1)?.id && !videoGuide && <>
                         <span>{language === 'hi' ? 'क्या वीडियो चल रहा है?' : 'Is the video playing?'}</span>
                         {['Yes', 'No'].map((reply) => <button key={reply} type="button" disabled={busy || recording} onClick={() => void guideVideo(message.playback.platform, 'playing', reply)}>{reply}</button>)}
                       </>}
@@ -376,7 +384,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                           {message.shopping.session.items.map((item, index) => {
                             const link = message.shopping.actions?.[index]
                             return <li key={item}>{link
-                              ? <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+                              ? <a href={link.url} target={link.kind === 'product' ? undefined : '_blank'} rel="noopener noreferrer">{link.label}</a>
                               : item}</li>
                           })}
                         </ul>

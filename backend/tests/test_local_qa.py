@@ -170,3 +170,34 @@ def test_video_uses_provider_search_when_direct_lookup_is_unavailable():
     assert result["playback_status"] == "search"
     assert result["playback_platform"] == "Prime Video"
     assert result["playback_url"] == "https://www.primevideo.com/search?phrase=Panchayat"
+
+
+def test_dhindora_spelling_offers_verified_links():
+    from agents.watch_show.watch_show import watch_show
+    with patch("agents.watch_show.watch_show.generate_voice", return_value={}):
+        result = watch_show("Dindora", "en", "Netflix")
+    assert result["playback_status"] == "choices"
+    assert result["playback_url"] is None
+    assert result["playback_options"][0]["url"] == "https://www.netflix.com/in/title/82643833"
+
+
+def test_blinkit_exact_pack_uses_product_link():
+    from agents.shoaping import retailer_item_links
+    direct, fallback = retailer_item_links("Blinkit", ("i kg patto", "2 kg potato"))
+    assert direct["url"] == "https://blinkit.com/prn/new-potato/prid/199435"
+    assert fallback["url"] == "https://blinkit.com/s/?q=2+kg+potato"
+
+
+def test_similar_title_choices_keep_direct_and_search_links():
+    from agents.watch_show.watch_show import SimilarTitles, watch_show
+    with (
+        patch("agents.watch_show.watch_show.generate_voice", return_value={}),
+        patch("agents.watch_show.watch_show.get_streaming_platforms",
+              side_effect=SimilarTitles([("Interstellar", 1), ("Interstellar Wars", 2)], {}, "IN")),
+        patch("agents.watch_show.watch_show.title_sources", side_effect=lambda title_id, *_: (
+            [{"platform": "Netflix", "web_url": "https://www.netflix.com/title/123", "access_type": "sub"}]
+            if title_id == 1 else []
+        )),
+    ):
+        result = watch_show("Intersteler", "en", "Netflix")
+    assert [choice["kind"] for choice in result["playback_options"]] == ["ready", "search"]

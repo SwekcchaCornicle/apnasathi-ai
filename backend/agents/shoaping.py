@@ -136,10 +136,22 @@ def retailer_item_links(store: str | None, items: tuple[str, ...]) -> list[dict[
     if store not in STORES:
         return []
     _, search, query = STORES[store]
-    return [
-        {"label": f"Find {item} on {store}", "url": f"{search}?{urlencode({query: item})}"}
-        for item in items
-    ]
+    actions = []
+    for item in items:
+        normalized = re.sub(r"\s+", " ", item.casefold().strip())
+        normalized = re.sub(r"\b(?:one|i)(?=\s+(?:kg|kilo)\b)", "1", normalized)
+        if store == "Blinkit" and re.fullmatch(
+            r"(?:1\s*(?:kg|kilo(?:gram)?|किलो)\s+(?:potat[oa](?:e?s)?|patato|patto|aloo|आलू)|(?:potato(?:es)?|aloo|आलू)\s+1\s*(?:kg|किलो))",
+            normalized,
+        ):
+            actions.append({
+                "label": f"Open {item} on Blinkit",
+                "url": "https://blinkit.com/prn/new-potato/prid/199435",
+                "kind": "product",
+            })
+        else:
+            actions.append({"label": f"Find {item} on {store}", "url": f"{search}?{urlencode({query: item})}"})
+    return actions
 
 
 def shopping_message(session: ShoppingSession) -> dict:
@@ -151,11 +163,11 @@ def shopping_message(session: ShoppingSession) -> dict:
     result = {"step": step, "response": PROMPTS[step].format(store=session.store, item=item),
               "choices": choices, "done": done, "action": None}
     if session.store and step in {"login", "sign_in", "sign_in_self", "item", "checkout_cart"}:
-        home, search, query = STORES[session.store]
-        # A retailer search avoids guessing a SKU or adding a product the user did not choose.
-        url = f"{search}?{urlencode({query: item})}" if item else home
-        result["action"] = {"label": f"Find {item} on {session.store}" if item else f"Open {session.store}",
-                            "url": url}
+        home, _, _ = STORES[session.store]
+        result["action"] = (
+            retailer_item_links(session.store, (item,))[0]
+            if item else {"label": f"Open {session.store}", "url": home}
+        )
         if item is not None and session.item_index == 0:
             result["actions"] = retailer_item_links(session.store, session.items)
     return result

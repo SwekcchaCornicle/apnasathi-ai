@@ -45,6 +45,7 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
     conversations = []
     unavailable = False
     instagram_publish_attempts = []
+    instagram_authorized = False
 
     def cognito(route):
         target = route.request.headers.get("x-amz-target", "").rsplit(".", 1)[-1]
@@ -104,11 +105,14 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             result = {"step": "playing", "response": "Is the video playing?", "done": False}
             if b"Yes" in (request.post_data_buffer or b""):
                 result = {"step": "confirmed", "response": "The video is playing.", "done": True}
+        elif path == "/instagram/caption":
+            assert b"fixture" in request.post_data_buffer
+            result = {"text": "Fixture caption"}
         elif path == "/instagram/photo":
             instagram_publish_attempts.append(request.post_data_buffer)
             result = {"step": "authorization", "action": {"url": "https://www.facebook.com/dialog/oauth"}}
         elif path == "/instagram/status":
-            result = {"step": "published", "response": "Fixture post confirmed"}
+            result = {"step": "published", "response": "Fixture post confirmed"} if instagram_authorized else {"step": "authorization"}
         elif path == "/assistant/chat":
             if unavailable:
                 route.abort()
@@ -119,7 +123,13 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             extra = {}
             if text == "Watch a fixture video":
                 intent, answer = "WATCH_SHOW", "Fixture video is ready"
-                extra["playback"] = {"url": "https://www.netflix.com/", "platform": "Netflix"}
+                extra["playback"] = {"url": "https://www.netflix.com/", "platform": "Netflix", "kind": "ready"}
+            elif text == "Watch Dindora":
+                intent, answer = "WATCH_SHOW", "Choose a title"
+                extra["playback"] = {"kind": "choices", "options": [{
+                    "title": "Dhindora · Netflix", "url": "https://www.netflix.com/in/title/82643833",
+                    "platform": "Netflix", "kind": "ready",
+                }]}
             elif text == "Help me post a fixture photo to Instagram":
                 intent, answer = "POST_PHOTO", "Please attach a photo"
             elif text == "Shop for fixture groceries":
@@ -248,17 +258,31 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             expect(page.get_by_text("The video is playing.", exact=True)).to_be_visible()
             page.get_by_role("button", name="Close playback guide").click()
 
+            send("Watch Dindora")
+            choice = page.get_by_role("link", name="Dhindora · Netflix")
+            expect(choice).to_be_visible()
+            assert len(page.evaluate("window.qaPlayback")) == 1
+            choice.click()
+            expect(page.get_by_text("Is the video playing?", exact=True)).to_be_visible()
+            assert page.evaluate("window.qaPlayback").pop() == "https://www.netflix.com/in/title/82643833"
+            page.get_by_role("button", name="Close playback guide").click()
+
             send("Help me post a fixture photo to Instagram")
             expect(page.get_by_role("button", name="Attach photo")).to_be_disabled()
             page.get_by_label("Choose a JPEG").set_input_files({"name": "fixture.jpg", "mimeType": "image/jpeg", "buffer": b"jpeg-fixture"})
             page.get_by_role("button", name="Attach photo").click()
-            page.get_by_label("Caption", exact=True).fill("Fixture caption")
+            page.get_by_role("button", name="Record caption").click()
+            page.get_by_role("button", name="Stop and transcribe").click()
+            expect(page.get_by_role("region", name="Instagram draft").locator("textarea")).to_have_value("Fixture caption", timeout=15000)
             page.get_by_role("button", name="Review post").click()
             expect(page.get_by_text("Fixture caption", exact=True)).to_be_visible()
             assert instagram_publish_attempts == []
             page.get_by_role("button", name="Confirm photo and caption").click()
             expect(page.get_by_role("link", name="Connect Instagram")).to_have_attribute("href", "https://www.facebook.com/dialog/oauth")
             assert len(instagram_publish_attempts) == 1 and b"Fixture caption" in instagram_publish_attempts[0]
+            page.get_by_role("button", name="I couldn’t authorize").click()
+            expect(page.get_by_text("Instagram not authorized.", exact=False)).to_be_visible()
+            instagram_authorized = True
             expect(page.get_by_text("Fixture post confirmed", exact=True)).to_be_visible()
             assert b"true" in instagram_publish_attempts[0]
         page.get_by_role("button", name="Sign out").click()

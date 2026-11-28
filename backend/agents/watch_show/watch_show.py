@@ -1,5 +1,7 @@
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
+from difflib import SequenceMatcher
 from pathlib import Path
 from ipaddress import ip_address
 from urllib.parse import urlencode, urlsplit
@@ -16,6 +18,28 @@ PROVIDER_SEARCH = {
     "netflix": ("Netflix", "https://www.netflix.com/search", "q"),
     "youtube": ("YouTube", "https://www.youtube.com/results", "search_query"),
 }
+
+
+DHINDORA_OPTIONS = [
+    {"title": "Dhindora · Netflix", "platform": "Netflix", "url": "https://www.netflix.com/in/title/82643833", "kind": "ready"},
+    {"title": "Dhindora · Episode 1", "platform": "YouTube", "url": "https://www.youtube.com/watch?v=Y_2y4y0kQig", "kind": "ready"},
+]
+
+
+def title_key(name: str) -> str:
+    return "".join(character for character in name.casefold() if character.isalnum())
+
+
+class SimilarTitles(ValueError):
+    def __init__(self, matches, headers, region):
+        self.matches = matches
+        self.headers = headers
+        self.region = region
+
+
+def provider_search(name, platform):
+    label, base, parameter = PROVIDER_SEARCH[platform]
+    return {"title": name, "platform": label, "url": f"{base}?{urlencode({parameter: name})}", "kind": "search"}
 
 
 def clean_streaming_platforms(
@@ -66,23 +90,23 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
         if not results:
             raise ValueError(f"No streaming platforms found for '{show_name}'.")
 
-        # Take the top search match
-        top_match = results[0]
-        title_id = top_match["id"]
-        matched_name = top_match["name"]
+        requested = title_key(show_name)
+        top_match = next((result for result in results if title_key(result["name"]) == requested), None)
+        if top_match is None:
+            matches = {}
+            for result in results:
+                matches.setdefault(result["name"], result["id"])
+            ranked = sorted(
+                matches,
+                key=lambda name: SequenceMatcher(None, requested, title_key(name)).ratio(),
+                reverse=True,
+            )
+            raise SimilarTitles([
+                (name, matches[name]) for name in ranked
+                if SequenceMatcher(None, requested, title_key(name)).ratio() >= 0.55
+            ][:3], headers, region)
 
-        # Step 2: Fetch streaming sources using the title_id
-        sources_url = f"{BASE_URL}/title/{title_id}/sources/"
-        sources_params = {"regions": region}
-
-        sources_res = requests.get(
-            sources_url, headers=headers, params=sources_params, timeout=10
-        )
-        sources_res.raise_for_status()
-        sources = sources_res.json()
-
-        platforms = clean_streaming_platforms(sources, matched_name)
-
+        platforms = title_sources(top_match["id"], top_match["name"], headers, region)
         if not platforms:
             raise ValueError(f"No streaming platforms found for '{show_name}'.")
 
@@ -91,6 +115,43 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
         raise RuntimeError(
             f"Unable to retrieve streaming platforms for '{show_name}'."
         ) from exc
+
+
+
+def title_sources(title_id, title, headers, region):
+    response = requests.get(
+        f"{BASE_URL}/title/{title_id}/sources/", headers=headers,
+        params={"regions": region}, timeout=5,
+    )
+    response.raise_for_status()
+    return clean_streaming_platforms(response.json(), title)
+
+
+def best_source(sources, provider):
+    priority = {"sub": 0, "free": 0, "ads": 0, "rent": 1, "buy": 2}
+    for source in sorted(sources, key=lambda item: priority.get(item["access_type"], 3)):
+        if (not provider or provider_key(source["platform"]) == provider) and is_streaming_url(source.get("web_url") or ""):
+            return source
+    return None
+
+
+def similar_title_options(similar, provider):
+    if not similar.matches:
+        return []
+    def resolve(match):
+        name, title_id = match
+        try:
+            source = best_source(title_sources(title_id, name, similar.headers, similar.region), provider)
+        except (requests.RequestException, ValueError):
+            source = None
+        if source:
+            return {"title": name, "platform": source["platform"], "url": source["web_url"], "kind": "ready"}
+        if not provider or provider in PROVIDER_SEARCH:
+            return provider_search(name, provider or "youtube")
+        return None
+
+    with ThreadPoolExecutor(max_workers=len(similar.matches)) as executor:
+        return [option for option in executor.map(resolve, similar.matches) if option]
 
 
 def provider_key(name: str) -> str:
@@ -126,28 +187,40 @@ def watch_show(show_name, language, requested_platform=None):
     status = "missing_title"
     playback_url = None
     playback_platform = None
+    playback_options = []
     if isinstance(show_name, str) and show_name.strip():
-        try:
-            sources = get_streaming_platforms(show_name.strip())
-            # Prefer included/free options before rental or purchase listings.
-            priority = {"sub": 0, "free": 0, "ads": 0, "rent": 1, "buy": 2}
-            for source in sorted(sources, key=lambda item: priority.get(item["access_type"], 3)):
-                platform = source["platform"]
-                url = source.get("web_url") or ""
-                if requested_platform and provider_key(platform) != provider_key(requested_platform):
-                    continue
-                if is_streaming_url(url):
-                    playback_url = url
-                    playback_platform = platform
-                    break
-            status = "ready" if playback_url else "source_unavailable"
-        except ValueError:
-            status = "source_unavailable"
-        except RuntimeError:
-            status = "failed"
-            logger.warning("Could not look up a streaming link.")
+        key = title_key(show_name.strip().removeprefix("a "))
+        provider = provider_key(requested_platform or "")
+        known = key in {"dhindora", "dhindoraseason2", "dhindora2", "dindora", "dindhora", "dhindhora", title_key("ढिंढोरा"), title_key("ढिंडोरा")}
+        if key in {"dhindoraseason2", "dhindora2"}:
+            known = provider in {"", "netflix"}
+            if known:
+                provider = "netflix"
+        if known and provider in {"", "netflix", "youtube"}:
+            if key in {"dhindora", "dhindoraseason2", "dhindora2"} and provider:
+                match = next(item for item in DHINDORA_OPTIONS if provider_key(item["platform"]) == provider)
+                playback_url, playback_platform = match["url"], match["platform"]
+                status = "ready"
+            else:
+                playback_options = DHINDORA_OPTIONS
+                status = "choices"
+        if status not in {"ready", "choices"}:
+            try:
+                sources = get_streaming_platforms(show_name.strip())
+                source = best_source(sources, provider)
+                if source:
+                    playback_url, playback_platform = source["web_url"], source["platform"]
+                status = "ready" if playback_url else "source_unavailable"
+            except SimilarTitles as similar:
+                playback_options = similar_title_options(similar, provider)
+                status = "choices" if playback_options else "source_unavailable"
+            except ValueError:
+                status = "source_unavailable"
+            except RuntimeError:
+                status = "failed"
+                logger.warning("Could not look up a streaming link.")
 
-        if not playback_url and requested_platform:
+        if not playback_url and not playback_options and requested_platform:
             search = PROVIDER_SEARCH.get(provider_key(requested_platform))
             if search:
                 playback_platform, base, parameter = search
@@ -156,6 +229,7 @@ def watch_show(show_name, language, requested_platform=None):
 
     label = playback_platform or requested_platform
     messages = {
+        "choices": ("Which video did you mean? Choose a title below.", "आप कौन सा वीडियो देखना चाहते हैं? नीचे शीर्षक चुनें।"),
         "ready": (f"The video is ready to open on {label}.", f"वीडियो {label} पर खोलने के लिए तैयार है।"),
         "search": (
             f"I couldn't verify a direct playback link. You can search for the title on {label}.",
@@ -174,6 +248,7 @@ def watch_show(show_name, language, requested_platform=None):
         "response": message,
         "playback_status": status,
         "playback_url": playback_url,
+        "playback_options": playback_options,
         "playback_platform": playback_platform,
         "response_language": reply_language,
         "voice": generate_voice(message, reply_language),

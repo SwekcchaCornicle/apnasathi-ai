@@ -208,6 +208,11 @@ def instagram_callback(
 
     try:
         token = agent.exchange_code(code)
+    except InstagramError as error:
+        notice = f"Instagram not authorized. {error}"
+        _finish(db, draft["id"], "not_authorized", notice)
+        return notice
+    try:
         container = agent.create_photo(token, f"{origin}/api/v1/instagram/image/{draft['image_key']}", draft["caption"])
     except InstagramError as error:
         _finish(db, draft["id"], "failed", str(error))
