@@ -25,10 +25,6 @@ class Reminder(Base):
     scheduled_at: Mapped[object] = mapped_column(DateTime(timezone=True), nullable=False)
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Kolkata")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="scheduled")
-    delivered_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    next_attempt_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
-    last_error: Mapped[str | None] = mapped_column(String(240))
 
 class DailyTask(Base):
     __tablename__ = "daily_tasks"

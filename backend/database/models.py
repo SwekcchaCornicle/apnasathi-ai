@@ -31,7 +31,6 @@ class UserProfile(TimestampMixin, Base):
     preferred_language: Mapped[str] = mapped_column(String(16), nullable=False, default="en", server_default="en")
     timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="Asia/Kolkata", server_default="Asia/Kolkata")
     preferences: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    whatsapp_phone: Mapped[str | None] = mapped_column(String(20))
     user: Mapped[User] = relationship(back_populates="profile")
 
 class Conversation(TimestampMixin, Base):
