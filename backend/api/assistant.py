@@ -15,9 +15,11 @@ from request_tracing import stage
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from agents.daily_planner import plan_daily_command
 from agents.shoaping import ShoppingSession, retailer_item_links, shopping_message, shopping_reply, start_shopping
 from auth.dependencies import get_current_user
 from database.models import Conversation, Memory, Message, SearchHistory, User
+from database.daily_models import DailyAction
 from database.session import get_db
 from llm_model.classify_intent_action import intent_action
 from llm_model.llm_model import VertexUnavailable, vertex_model
@@ -34,6 +36,7 @@ ACTION_REQUEST = re.compile(r"\b(use|open|launch|call|phone|send|message|text|po
 BLINKIT = re.compile(r"\bblinkit\b|ब्लिंकिट", re.IGNORECASE)
 SHOPPING_STATE = TypeAdapter(ShoppingSession)
 CHANGE_ITEMS = re.compile(r"^(?:change|replace) (?:the )?items(?: to)?[ :]+(.+)$", re.IGNORECASE)
+DAILY_COMMAND = re.compile(r"\b(remind me|set a reminder|reminder|to[- ]?do|todo|task|track (?:an? )?expense|log (?:an? )?expense|plan (?:my )?meal|meal plan|shopping list|draft (?:a )?message|write (?:a )?message|add (?:this )?to (?:my )?calendar|schedule (?:a )?(?:meeting|event)|create (?:a )?calendar event|calendar event)\b|रिमाइंडर|याद दिला|याद रखना|टू[- ]?डू|काम की सूची|खर्चा|खर्च लिख|खाने का प्लान|खाना प्लान|शॉपिंग लिस्ट|मैसेज लिख|कैलेंडर में जोड़|मीटिंग रखो|इवेंट जोड़ो", re.IGNORECASE)
 PREVIOUS_ORDER = re.compile(r"\b(last|previous|prior)\b.{0,30}\b(order|ordered|time)\b|पिछली बार|पिछला ऑर्डर", re.IGNORECASE)
 
 
@@ -59,6 +62,7 @@ class AssistantChatResponse(BaseModel):
     requires_confirmation: bool = False
     shopping: dict | None = None
     playback: dict | None = None
+    daily_actions: list[dict] | None = None
 
 
 def _shopping_in_chat(session: ShoppingSession) -> ShoppingSession:
@@ -159,9 +163,10 @@ def assistant_chat(
     prior_shopping = (previous_assistant.metadata_json or {}).get("shopping") if previous_assistant else None
     shopping = None
     playback = None
+    daily_actions = None
     previous_blinkit = bool(BLINKIT.search(question) and PREVIOUS_ORDER.search(question))
     shopping_active = bool(prior_shopping and not prior_shopping["done"])
-    cache_allowed = not (shopping_active or previous_blinkit or is_action_request(question) or CURRENT_INFO.search(question))
+    cache_allowed = not (shopping_active or previous_blinkit or DAILY_COMMAND.search(question) or is_action_request(question) or CURRENT_INFO.search(question))
     match = None
     if cache_allowed:
         try:
@@ -174,7 +179,36 @@ def assistant_chat(
         except Exception as error:
             logger.warning("Semantic lookup failed (%s).", type(error).__name__)
 
-    if previous_blinkit:
+    if DAILY_COMMAND.search(question):
+        try:
+            planned = plan_daily_command(question, language)
+        except VertexUnavailable:
+            raise HTTPException(status_code=503, detail="The AI service is temporarily unavailable.") from None
+        except ValueError:
+            raise HTTPException(status_code=502, detail="The AI could not create a valid action plan.") from None
+        intent = planned.actions[0].intent if planned.actions else "DAILY_ASSISTANT"
+        language = planned.language if planned.language in {"en", "hi"} else language
+        response_text = planned.clarification_question or planned.response
+        source = "daily_planner"
+        if planned.needs_clarification:
+            daily_actions = []
+        else:
+            daily_actions = []
+            for item in planned.actions:
+                row = DailyAction(
+                    user_id=user.id,
+                    intent=item.intent,
+                    payload=item.entities,
+                    status="awaiting_confirmation" if item.requires_confirmation else "planned",
+                )
+                db.add(row)
+                db.flush()
+                daily_actions.append({
+                    "id": str(row.id), "intent": row.intent, "payload": row.payload,
+                    "status": row.status, "requires_confirmation": item.requires_confirmation,
+                })
+        requires_confirmation = bool(daily_actions)
+    elif previous_blinkit:
         response_text = _saved_blinkit_reply(db, user.id, language)
         source = "saved_history"
         intent = "ORDER_GROCERIES"
@@ -299,7 +333,7 @@ def assistant_chat(
         content=response_text,
         language=language,
         intent=intent,
-        metadata_json={"source": source, "similarity": similarity, **({"shopping": shopping} if shopping is not None else {}), **({"playback": playback} if playback is not None else {})},
+        metadata_json={"source": source, "similarity": similarity, **({"shopping": shopping} if shopping is not None else {}), **({"playback": playback} if playback is not None else {}), **({"daily_actions": daily_actions} if daily_actions is not None else {})},
     )
     db.add(assistant_message)
     db.add(SearchHistory(
@@ -327,6 +361,7 @@ def assistant_chat(
         requires_confirmation=requires_confirmation,
         shopping=shopping,
         playback=playback,
+        daily_actions=daily_actions,
     )
 
 @router.post("/assistant/audio", response_model=AssistantChatResponse, max_body_size=MAX_AUDIO_REQUEST_BYTES)

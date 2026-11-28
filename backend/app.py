@@ -39,6 +39,7 @@ from api.knowledge import router as knowledge_router
 from auth.dependencies import get_current_user
 from sqlalchemy.exc import OperationalError
 from api.persistence import router as persistence_router
+from api.daily_assistant import router as daily_assistant_router
 
 
 REPLY_INTENTS = {"GREETING", "GENERAL_QUESTION", "GENERAL_CONVERSATION", "WATCH_SHOW"}
@@ -228,7 +229,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(RequestTracingMiddleware)
-for authenticated_router in (auth_router, assistant_router, knowledge_router, persistence_router):
+for authenticated_router in (auth_router, assistant_router, knowledge_router, persistence_router, daily_assistant_router):
     app.include_router(authenticated_router, prefix="/api/v1")
 
 app.include_router(router, prefix="/api/v1")

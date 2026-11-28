@@ -41,6 +41,8 @@ class ApplicationStack(Stack):
         instagram_secret_json_key: str | None = None,
         instagram_api_version: str | None = None,
         instagram_image_origin: str | None = None,
+        whatsapp_secret_arn: str | None = None,
+        google_calendar_secret_arn: str | None = None,
         **kwargs,
     ):
         super().__init__(scope, construct_id, **kwargs)
@@ -179,6 +181,37 @@ class ApplicationStack(Stack):
                 name="INSTAGRAM_APP_SECRET", value_from=secret_reference,
             ))
 
+        whatsapp_secrets = []
+        if whatsapp_secret_arn:
+            self.execution_role.add_to_policy(iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"], resources=[whatsapp_secret_arn],
+            ))
+            for env_name, json_key in (
+                ("WHATSAPP_ACCESS_TOKEN", "access_token"),
+                ("WHATSAPP_PHONE_NUMBER_ID", "phone_number_id"),
+                ("WHATSAPP_REMINDER_TEMPLATE", "reminder_template"),
+                ("WHATSAPP_GRAPH_API_VERSION", "graph_api_version"),
+                ("WHATSAPP_TEMPLATE_LANGUAGE", "template_language"),
+            ):
+                whatsapp_secrets.append(ecs.CfnTaskDefinition.SecretProperty(
+                    name=env_name, value_from=f"{whatsapp_secret_arn}:{json_key}::",
+                ))
+
+        google_calendar_secrets = []
+        if google_calendar_secret_arn:
+            self.execution_role.add_to_policy(iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"], resources=[google_calendar_secret_arn],
+            ))
+            for env_name, json_key in (
+                ("GOOGLE_CALENDAR_CLIENT_ID", "client_id"),
+                ("GOOGLE_CALENDAR_CLIENT_SECRET", "client_secret"),
+                ("GOOGLE_CALENDAR_REDIRECT_URI", "redirect_uri"),
+                ("GOOGLE_TOKEN_ENCRYPTION_KEY", "token_encryption_key"),
+            ):
+                google_calendar_secrets.append(ecs.CfnTaskDefinition.SecretProperty(
+                    name=env_name, value_from=f"{google_calendar_secret_arn}:{json_key}::",
+                ))
+
         cognito_environment = {}
         if cognito_user_pool and cognito_client_id:
             cognito_environment = {
@@ -243,6 +276,8 @@ class ApplicationStack(Stack):
                     secrets=[
                         *google_secrets,
                         *instagram_secrets,
+                        *whatsapp_secrets,
+                        *google_calendar_secrets,
                         *watchmode_secrets,
                         ecs.CfnTaskDefinition.SecretProperty(
                             name="DATABASE_CREDENTIALS",
@@ -265,6 +300,71 @@ class ApplicationStack(Stack):
                 )
             ],
         )
+
+        # -------------------------------------------------
+        # 6b. WhatsApp reminder worker (only when configured)
+        # -------------------------------------------------
+        if whatsapp_secret_arn:
+            self.reminder_task_definition = ecs.CfnTaskDefinition(
+                self, "ReminderWorkerTaskDefinition",
+                family="apnasathi-reminder-worker",
+                requires_compatibilities=["FARGATE"], network_mode="awsvpc",
+                cpu="256", memory="512",
+                execution_role_arn=self.execution_role.role_arn,
+                task_role_arn=self.task_role.role_arn,
+                runtime_platform=ecs.CfnTaskDefinition.RuntimePlatformProperty(
+                    operating_system_family="LINUX", cpu_architecture="ARM64",
+                ),
+                container_definitions=[
+                    ecs.CfnTaskDefinition.ContainerDefinitionProperty(
+                        name="reminder-worker",
+                        image=f"{self.repository.repository_uri}:{image_tag}",
+                        essential=True,
+                        command=["python", "-m", "workers.reminder_worker"],
+                        environment=[
+                            ecs.CfnTaskDefinition.KeyValuePairProperty(name="AWS_REGION", value=self.region),
+                            ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_HOST", value=database.database.attr_endpoint_address),
+                            ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_PORT", value="5432"),
+                            ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_NAME", value="apnasathi"),
+                            *(ecs.CfnTaskDefinition.KeyValuePairProperty(name=name, value=value) for name, value in ({"HTTPS_PROXY": https_proxy, "NO_PROXY": "localhost,127.0.0.1,169.254.170.2,169.254.170.23,169.254.169.254,.amazonaws.com"}.items() if https_proxy else [])),
+                        ],
+                        secrets=[
+                            *whatsapp_secrets,
+                            ecs.CfnTaskDefinition.SecretProperty(
+                                name="DATABASE_CREDENTIALS",
+                                value_from=database.database.attr_master_user_secret_secret_arn,
+                            ),
+                        ],
+                        log_configuration=ecs.CfnTaskDefinition.LogConfigurationProperty(
+                            log_driver="awslogs",
+                            options={
+                                "awslogs-group": self.log_group.log_group_name,
+                                "awslogs-region": self.region,
+                                "awslogs-stream-prefix": "reminder-worker",
+                            },
+                        ),
+                    )
+                ],
+            )
+            self.reminder_worker_service = ecs.CfnService(
+                self, "ReminderWorkerService",
+                service_name="apnasathi-reminder-worker",
+                cluster=self.cluster.ref,
+                task_definition=self.reminder_task_definition.ref,
+                launch_type="FARGATE", desired_count=1,
+                deployment_configuration=ecs.CfnService.DeploymentConfigurationProperty(
+                    deployment_circuit_breaker=ecs.CfnService.DeploymentCircuitBreakerProperty(
+                        enable=True, rollback=True,
+                    )
+                ),
+                network_configuration=ecs.CfnService.NetworkConfigurationProperty(
+                    awsvpc_configuration=ecs.CfnService.AwsVpcConfigurationProperty(
+                        assign_public_ip="DISABLED",
+                        subnets=[private_subnet_a.ref, private_subnet_b.ref],
+                        security_groups=[backend_security_group.attr_group_id],
+                    )
+                ),
+            )
 
         # -------------------------------------------------
         # 7. Application Load Balancer
