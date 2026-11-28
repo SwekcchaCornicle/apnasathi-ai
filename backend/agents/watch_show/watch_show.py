@@ -31,9 +31,9 @@ def title_key(name: str) -> str:
 
 
 class SimilarTitles(ValueError):
-    def __init__(self, matches, headers, region):
+    def __init__(self, matches, region):
+        super().__init__("No exact streaming title match.")
         self.matches = matches
-        self.headers = headers
         self.region = region
 
 
@@ -62,15 +62,19 @@ def clean_streaming_platforms(
     return platforms
 
 
-def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
-    """Finds streaming platforms for a given show name and country code (e.g., 'IN', 'US')."""
+def watchmode_headers():
     api_key = os.getenv("WATCHMODE_API_KEY")
     if not api_key:
         config = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
         api_key = config.get("WATCHMODE_API_KEY") or config.get("watch_mode_api")
     if not api_key:
         raise RuntimeError("Set WATCHMODE_API_KEY or watch_mode_api in agents/.env.")
-    headers = {"X-API-Key": api_key}
+    return {"X-API-Key": api_key}
+
+
+def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
+    """Finds streaming platforms for a given show name and country code (e.g., 'IN', 'US')."""
+    headers = watchmode_headers()
 
     # Step 1: Search for the show by name to get its Watchmode ID
     search_url = f"{BASE_URL}/search/"
@@ -104,7 +108,7 @@ def get_streaming_platforms(show_name: str, region: str = "IN") -> list[dict]:
             raise SimilarTitles([
                 (name, matches[name]) for name in ranked
                 if SequenceMatcher(None, requested, title_key(name)).ratio() >= 0.55
-            ][:3], headers, region)
+            ][:3], region)
 
         platforms = title_sources(top_match["id"], top_match["name"], headers, region)
         if not platforms:
@@ -138,10 +142,12 @@ def best_source(sources, provider):
 def similar_title_options(similar, provider):
     if not similar.matches:
         return []
+    headers = watchmode_headers()
+
     def resolve(match):
         name, title_id = match
         try:
-            source = best_source(title_sources(title_id, name, similar.headers, similar.region), provider)
+            source = best_source(title_sources(title_id, name, headers, similar.region), provider)
         except (requests.RequestException, ValueError):
             source = None
         if source:

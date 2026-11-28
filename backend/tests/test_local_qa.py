@@ -193,7 +193,8 @@ def test_similar_title_choices_keep_direct_and_search_links():
     with (
         patch("agents.watch_show.watch_show.generate_voice", return_value={}),
         patch("agents.watch_show.watch_show.get_streaming_platforms",
-              side_effect=SimilarTitles([("Interstellar", 1), ("Interstellar Wars", 2)], {}, "IN")),
+              side_effect=SimilarTitles([("Interstellar", 1), ("Interstellar Wars", 2)], "IN")),
+        patch("agents.watch_show.watch_show.watchmode_headers", return_value={}),
         patch("agents.watch_show.watch_show.title_sources", side_effect=lambda title_id, *_: (
             [{"platform": "Netflix", "web_url": "https://www.netflix.com/title/123", "access_type": "sub"}]
             if title_id == 1 else []
