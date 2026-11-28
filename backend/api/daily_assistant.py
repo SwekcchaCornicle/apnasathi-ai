@@ -209,15 +209,19 @@ def add_calendar_event(data: CalendarEventInput, user: UserDep, db: DbDep):
 
 class WhatsAppPhoneInput(BaseModel):
     phone: str = Field(min_length=8, max_length=16, pattern=r"^\+[1-9][0-9]{7,14}$")
+    opt_in: bool
 
 @router.put("/whatsapp/phone")
 def set_whatsapp_phone(data: WhatsAppPhoneInput, user: UserDep, db: DbDep):
     profile = db.get(UserProfile, user.id)
+    if not data.opt_in:
+        raise HTTPException(400, "Explicit WhatsApp reminder opt-in is required.")
     if profile is None:
-        profile = UserProfile(user_id=user.id, whatsapp_phone=data.phone)
+        profile = UserProfile(user_id=user.id, whatsapp_phone=data.phone, whatsapp_opt_in=True)
         db.add(profile)
     else:
         profile.whatsapp_phone = data.phone
+        profile.whatsapp_opt_in = True
     return {"configured": True, "phone": "••••" + data.phone[-4:]}
 
 @router.delete("/whatsapp/phone")
@@ -225,4 +229,5 @@ def clear_whatsapp_phone(user: UserDep, db: DbDep):
     profile = db.get(UserProfile, user.id)
     if profile is not None:
         profile.whatsapp_phone = None
+        profile.whatsapp_opt_in = False
     return {"configured": False}

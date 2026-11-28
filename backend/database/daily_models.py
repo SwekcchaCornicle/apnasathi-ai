@@ -29,6 +29,7 @@ class Reminder(Base):
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     next_attempt_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(String(240))
+    claimed_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))
 
 class DailyTask(Base):
     __tablename__ = "daily_tasks"
