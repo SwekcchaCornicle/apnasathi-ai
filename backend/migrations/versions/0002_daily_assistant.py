@@ -8,8 +8,11 @@ branch_labels=None
 depends_on=None
 
 def upgrade():
-    op.add_column("user_profiles", sa.Column("whatsapp_phone", sa.String(20), nullable=True))
-    op.add_column("user_profiles", sa.Column("whatsapp_opt_in", sa.Boolean(), nullable=False, server_default=sa.false()))
+    existing_profile_columns = {column["name"] for column in sa.inspect(op.get_bind()).get_columns("user_profiles")}
+    if "whatsapp_phone" not in existing_profile_columns:
+        op.add_column("user_profiles", sa.Column("whatsapp_phone", sa.String(20), nullable=True))
+    if "whatsapp_opt_in" not in existing_profile_columns:
+        op.add_column("user_profiles", sa.Column("whatsapp_opt_in", sa.Boolean(), nullable=False, server_default=sa.false()))
     u=postgresql.UUID(as_uuid=True); j=postgresql.JSONB()
     op.create_table("google_calendar_credentials", sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),primary_key=True), sa.Column("refresh_token_encrypted",sa.Text(),nullable=False), sa.Column("connected_at",sa.DateTime(timezone=True),server_default=sa.func.now(),nullable=False))
     op.create_table("google_oauth_states", sa.Column("state_hash",sa.String(64),primary_key=True), sa.Column("user_id",u,sa.ForeignKey("users.id",ondelete="CASCADE"),nullable=False), sa.Column("expires_at",sa.DateTime(timezone=True),nullable=False), sa.Column("used_at",sa.DateTime(timezone=True)))
