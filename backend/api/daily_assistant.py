@@ -208,7 +208,7 @@ def add_calendar_event(data: CalendarEventInput, user: UserDep, db: DbDep):
 
 
 class WhatsAppPhoneInput(BaseModel):
-    phone: str = Field(min_length=8, max_length=16, pattern=r"^\\+[1-9][0-9]{7,14}$")
+    phone: str = Field(min_length=8, max_length=16, pattern=r"^\+[1-9][0-9]{7,14}$")
 
 @router.put("/whatsapp/phone")
 def set_whatsapp_phone(data: WhatsAppPhoneInput, user: UserDep, db: DbDep):
