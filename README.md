@@ -91,70 +91,23 @@ The application roughly does this:
 
 ## 2. Application screenshots
 
-The repository currently contains the React source and styling, but does not contain a folder of captured application screenshots. Add genuine screenshots from the running application to the paths below. The image references are intentionally placeholders until those files are committed.
+These screenshots were captured from the running ApnaSathi application after signing in. They show the real React interface served by the deployed API Gateway endpoint. The mobile image was captured at a 390 × 844 viewport.
 
-Create this folder:
+### Authenticated chat workspace — desktop
 
-```text
-docs/
-└── screenshots/
-    ├── 01-welcome.png
-    ├── 02-language-selection.png
-    ├── 03-sign-in.png
-    ├── 04-chat-workspace.png
-    ├── 05-shopping-flow.png
-    ├── 06-voice-conversation.png
-    └── 07-instagram-draft.png
-```
+![ApnaSathi authenticated chat workspace on desktop](docs/screenshots/04-chat-workspace-desktop.jpg)
 
-### Welcome screen
+The workspace brings the assistant prompt, new-chat action, suggested starting points, message composer, microphone control, language selector, and account sign-out into one place. The suggestions shown are starting prompts; choosing one begins a conversation with that workflow.
 
-<!-- Add a real screenshot at docs/screenshots/01-welcome.png -->
-![ApnaSathi welcome screen](docs/screenshots/01-welcome.png)
+### Authenticated chat workspace — mobile
 
-The welcome screen introduces the product and its community-oriented language. The application begins with a language selection step before account sign-in.
+![ApnaSathi authenticated chat workspace on mobile](docs/screenshots/04-chat-workspace-mobile.jpg)
 
-### Language selection
+The same workspace is available in a narrow mobile layout. This is useful for a voice-first assistant because users can open the experience from a phone and start with a short text or spoken request.
 
-<!-- Add a real screenshot at docs/screenshots/02-language-selection.png -->
-![Language selection screen](docs/screenshots/02-language-selection.png)
+### Other workflow screens
 
-The current frontend presents English and Hindi as the supported choices. The selected language is kept in browser session storage and is also sent to the backend as the conversation preference.
-
-### Sign-in and registration
-
-<!-- Add a real screenshot at docs/screenshots/03-sign-in.png -->
-![ApnaSathi sign-in screen](docs/screenshots/03-sign-in.png)
-
-Users can create an account, verify their email, sign in, and start a password-reset flow. Cognito performs the identity operations; the backend independently verifies the ID token before creating or updating the local ApnaSathi account.
-
-### Chat workspace
-
-<!-- Add a real screenshot at docs/screenshots/04-chat-workspace.png -->
-![ApnaSathi chat workspace](docs/screenshots/04-chat-workspace.png)
-
-The chat workspace contains the conversation thread, message composer, microphone control, conversation history, new-chat action, language indicator, and sign-out action.
-
-### Shopping guidance
-
-<!-- Add a real screenshot at docs/screenshots/05-shopping-flow.png -->
-![Shopping guidance flow](docs/screenshots/05-shopping-flow.png)
-
-The assistant presents a list of requested products and links that open retailer searches. It asks for confirmation as the user moves through the guided steps.
-
-### Voice conversation
-
-<!-- Add a real screenshot at docs/screenshots/06-voice-conversation.png -->
-![Voice conversation](docs/screenshots/06-voice-conversation.png)
-
-The browser records audio and sends it to the assistant. The backend validates and transcribes the recording before passing the transcript into the same chat orchestration path.
-
-### Instagram draft
-
-<!-- Add a real screenshot at docs/screenshots/07-instagram-draft.png -->
-![Instagram draft workflow](docs/screenshots/07-instagram-draft.png)
-
-The Instagram component collects a photo and caption, connects a professional Instagram account through Meta authorization, and lets the user review before publishing.
+The repository also contains the language-selection and Cognito account screens, guided shopping logic, Watchmode lookup and troubleshooting, and the Instagram photo-draft workflow. Those screens are implemented in the source code, but are not represented by screenshots in this capture set. This README deliberately avoids using mockups or generated images as if they were screenshots of the running product.
 
 ---
 
