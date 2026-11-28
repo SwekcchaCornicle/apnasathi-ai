@@ -3,6 +3,12 @@ import InstagramDraft from './InstagramDraft.jsx'
 
 const API = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 const INTENTS = [
+  { id: 'SET_REMINDER', label: 'Reminders', icon: '⏰', terms: ['remind', 'reminder', 'याद दिला'] },
+  { id: 'CREATE_TODO', label: 'To-do', icon: '✅', terms: ['todo', 'to-do', 'task', 'टू-डू'] },
+  { id: 'TRACK_EXPENSE', label: 'Expenses', icon: '💸', terms: ['expense', 'spent', 'खर्च'] },
+  { id: 'PLAN_MEAL', label: 'Meals', icon: '🍲', terms: ['meal', 'breakfast', 'lunch', 'dinner', 'खाना'] },
+  { id: 'DRAFT_MESSAGE', label: 'Messages', icon: '✉️', terms: ['message', 'whatsapp', 'मैसेज'] },
+  { id: 'CREATE_SHOPPING_LIST', label: 'Shopping lists', icon: '🧺', terms: ['shopping list', 'grocery list'] },
   { id: 'ORDER_GROCERIES', label: 'Shopping', icon: '🛍️', terms: ['blinkit', 'zepto', 'instamart', 'shopping', 'grocery', 'order'] },
   { id: 'POST_PHOTO', label: 'Instagram', icon: '📸', terms: ['instagram', 'photo', 'reel', 'caption', 'post'] },
   { id: 'WATCH_SHOW', label: 'Watching videos', icon: '▶️', terms: ['watch', 'video', 'movie', 'show', 'series', 'netflix', 'prime'] },
@@ -203,7 +209,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
       setMessageList((current) => [
         ...current.filter((item) => !String(item.id).startsWith('pending-')),
         { id: result.user_message_id, role: 'user', content, language: result.language },
-        { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback },
+        { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback, daily_actions: result.daily_actions },
       ])
       videoOpened = openVideoResult(result, tab)
       if (result.playback?.url && !videoOpened) setNotice('Use the video link if your browser blocked the new tab.')
@@ -216,6 +222,22 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
       if (tab && !videoOpened) tab.close()
       setBusy(false)
     }
+  }
+
+  async function confirmDailyAction(actionId) {
+    setBusy(true)
+    setNotice('')
+    try {
+      const result = await request(`/daily/actions/${actionId}/confirm`, { method: 'POST' })
+      setMessageList((current) => current.map((message) => ({
+        ...message,
+        daily_actions: message.daily_actions?.map((action) => action.id === actionId
+          ? { ...action, status: result.status, result: result.result }
+          : action),
+      })))
+      setNotice(language === 'hi' ? 'आपका काम सेव हो गया।' : 'Your action has been saved.')
+    } catch (error) { setNotice(error.message) }
+    finally { setBusy(false) }
   }
 
   async function guideVideo(platform, step, reply, audio) {
@@ -357,6 +379,16 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                 <div className="chat-message-body">
                   <span className="chat-author">{message.role === 'user' ? 'You' : 'ApnaSathi'}</span>
                   <p>{message.content}</p>
+                  {message.daily_actions?.length > 0 && <div className="daily-action-list" aria-label="Actions awaiting your confirmation">
+                    {message.daily_actions.map((action) => <div className="daily-action-card" key={action.id}>
+                      <div><strong>{({ SET_REMINDER: '⏰ Reminder', CREATE_TODO: '✅ To-do', DRAFT_MESSAGE: '✉️ Message draft', CREATE_SHOPPING_LIST: '🧺 Shopping list', ADD_SHOPPING_ITEM: '🛒 Shopping item', TRACK_EXPENSE: '💸 Expense', PLAN_MEAL: '🍲 Meal plan' })[action.intent] || action.intent}</strong>
+                        <span>{Object.values(action.payload || {}).filter((value) => typeof value === 'string' || typeof value === 'number').join(' · ')}</span>
+                      </div>
+                      {action.status === 'awaiting_confirmation'
+                        ? <button type="button" disabled={busy} onClick={() => void confirmDailyAction(action.id)}>{language === 'hi' ? 'पुष्टि करें' : 'Confirm & save'}</button>
+                        : <span className="daily-action-status">✓ {action.status === 'completed' ? 'Saved' : action.status}</span>}
+                    </div>)}
+                  </div>}
                   {message.playback && (
                     <div className="suggestion-row">
                       {message.playback.options?.map((option) => (
