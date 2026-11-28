@@ -224,6 +224,15 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
     }
   }
 
+  async function connectGoogleCalendar() {
+    setBusy(true)
+    setNotice('')
+    try {
+      const result = await request('/daily/google/calendar/connect')
+      window.location.assign(result.authorization_url)
+    } catch (error) { setNotice(error.message); setBusy(false) }
+  }
+
   async function confirmDailyAction(actionId) {
     setBusy(true)
     setNotice('')
@@ -356,7 +365,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
         <div className="chat-main">
           <div className="chat-heading">
             <div><span className="chat-eyebrow">YOUR PERSONAL ASSISTANT</span><h1>How can I help today?</h1><p>Ask anything, or tap the microphone and speak naturally.</p></div>
-            <button className="new-chat-button" type="button" onClick={newConversation} disabled={busy || recording || requestingMic}>＋ New chat</button>
+            <div className="chat-heading-actions"><button className="new-chat-button" type="button" onClick={() => void connectGoogleCalendar()} disabled={busy || recording || requestingMic}>📅 Connect Calendar</button>            <button className="new-chat-button" type="button" onClick={newConversation} disabled={busy || recording || requestingMic}>＋ New chat</button></div>
           </div>
 
           <div className="chat-thread" role="log" aria-label="Chat messages">
@@ -381,7 +390,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                   <p>{message.content}</p>
                   {message.daily_actions?.length > 0 && <div className="daily-action-list" aria-label="Actions awaiting your confirmation">
                     {message.daily_actions.map((action) => <div className="daily-action-card" key={action.id}>
-                      <div><strong>{({ SET_REMINDER: '⏰ Reminder', CREATE_TODO: '✅ To-do', DRAFT_MESSAGE: '✉️ Message draft', CREATE_SHOPPING_LIST: '🧺 Shopping list', ADD_SHOPPING_ITEM: '🛒 Shopping item', TRACK_EXPENSE: '💸 Expense', PLAN_MEAL: '🍲 Meal plan' })[action.intent] || action.intent}</strong>
+                      <div><strong>{({ SET_REMINDER: '⏰ Reminder', CREATE_TODO: '✅ To-do', DRAFT_MESSAGE: '✉️ Message draft', CREATE_SHOPPING_LIST: '🧺 Shopping list', ADD_SHOPPING_ITEM: '🛒 Shopping item', TRACK_EXPENSE: '💸 Expense', PLAN_MEAL: '🍲 Meal plan', CREATE_CALENDAR_EVENT: '📅 Calendar event' })[action.intent] || action.intent}</strong>
                         <span>{Object.values(action.payload || {}).filter((value) => typeof value === 'string' || typeof value === 'number').join(' · ')}</span>
                       </div>
                       {action.status === 'awaiting_confirmation'

@@ -326,6 +326,7 @@ class ApplicationStack(Stack):
                             ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_PORT", value="5432"),
                             ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_NAME", value="apnasathi"),
                             ecs.CfnTaskDefinition.KeyValuePairProperty(name="WHATSAPP_TEMPLATE_LANGUAGE", value="en"),
+                            *(ecs.CfnTaskDefinition.KeyValuePairProperty(name=name, value=value) for name, value in ({"HTTPS_PROXY": https_proxy, "NO_PROXY": "localhost,127.0.0.1,169.254.170.2,169.254.170.23,169.254.169.254,.amazonaws.com"}.items() if https_proxy else [])),
                         ],
                         secrets=[
                             *whatsapp_secrets,
