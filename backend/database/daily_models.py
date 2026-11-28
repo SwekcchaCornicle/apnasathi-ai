@@ -73,3 +73,16 @@ class MessageDraft(Base):
     recipient: Mapped[str | None] = mapped_column(String(160))
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class GoogleCalendarCredential(Base):
+    __tablename__ = "google_calendar_credentials"
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    refresh_token_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    connected_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class GoogleOAuthState(Base):
+    __tablename__ = "google_oauth_states"
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    expires_at: Mapped[object] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[object | None] = mapped_column(DateTime(timezone=True))

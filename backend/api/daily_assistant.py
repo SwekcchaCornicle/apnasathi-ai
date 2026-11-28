@@ -12,6 +12,7 @@ from database.daily_models import DailyAction, Reminder, DailyTask, ShoppingList
 from database.models import User
 from database.session import get_db
 from llm_model.llm_model import VertexUnavailable
+from integrations.google_calendar import GoogleCalendarError, create_calendar_event, google_oauth_url, exchange_google_code, encrypt_refresh_token
 
 router = APIRouter(prefix="/daily", tags=["daily-assistant"])
 UserDep = Annotated[User, Depends(get_current_user)]
@@ -91,6 +92,13 @@ def confirm(action_id: UUID, user: UserDep, db: DbDep):
     elif action.intent=="PLAN_MEAL":
         if any(p.get(k) is None for k in ("plan_date","meal_type","title")): raise HTTPException(422,"Meal date, type and title are required.")
         row=MealPlan(user_id=user.id,plan_date=datetime.fromisoformat(p["plan_date"].replace("Z","+00:00")),meal_type=p["meal_type"],title=p["title"],ingredients=p.get("ingredients",[])); db.add(row); db.flush(); result={"meal_plan_id":str(row.id)}
+    elif action.intent=="CREATE_CALENDAR_EVENT":
+        if not all(p.get(k) for k in ("title", "start_at", "end_at", "timezone")): raise HTTPException(422,"Calendar title, start, end and timezone are required.")
+        try:
+            event = create_calendar_event(db, user.id, p)
+        except GoogleCalendarError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from None
+        result = {"calendar_event_id": event["id"], "html_link": event.get("htmlLink")}
     elif action.intent=="DRAFT_MESSAGE":
         if not p.get("body"): raise HTTPException(422,"Message body is required.")
         row=MessageDraft(user_id=user.id,channel=p.get("channel","whatsapp"),recipient=p.get("recipient"),body=p["body"]); db.add(row); db.flush(); result={"draft_id":str(row.id),"sent":False}
@@ -144,3 +152,56 @@ def add_draft(data:DraftInput,user:UserDep,db:DbDep):
 @router.get("/message-drafts")
 def drafts(user:UserDep,db:DbDep):
     return [{"id":str(x.id),"channel":x.channel,"recipient":x.recipient,"body":x.body} for x in db.scalars(select(MessageDraft).where(MessageDraft.user_id==user.id).order_by(MessageDraft.created_at.desc()))]
+
+@router.get("/google/calendar/connect")
+def google_calendar_connect(user: UserDep, db: DbDep):
+    import hashlib, secrets
+    from datetime import timedelta
+    state = secrets.token_urlsafe(32)
+    db.add(GoogleOAuthState(state_hash=hashlib.sha256(state.encode()).hexdigest(), user_id=user.id,
+                           expires_at=datetime.now(timezone.utc) + timedelta(minutes=10)))
+    try: url = google_oauth_url(state)
+    except GoogleCalendarError as exc: raise HTTPException(exc.status_code, str(exc)) from None
+    return {"authorization_url": url}
+
+@router.get("/google/calendar/callback")
+def google_calendar_callback(code: str, state: str, db: DbDep):
+    import hashlib
+    state_hash = hashlib.sha256(state.encode()).hexdigest()
+    row = db.scalar(select(GoogleOAuthState).where(
+        GoogleOAuthState.state_hash == state_hash,
+        GoogleOAuthState.expires_at > datetime.now(timezone.utc),
+        GoogleOAuthState.used_at.is_(None),
+    ).with_for_update())
+    if row is None: raise HTTPException(400, "Google authorization state is invalid or expired.")
+    try:
+        token_data = exchange_google_code(code)
+        refresh_token = token_data.get("refresh_token")
+        if not refresh_token: raise GoogleCalendarError("Google did not return a refresh token. Reconnect and approve offline access.", 400)
+        encrypted = encrypt_refresh_token(refresh_token)
+    except GoogleCalendarError as exc: raise HTTPException(exc.status_code, str(exc)) from None
+    credential = db.get(GoogleCalendarCredential, row.user_id)
+    if credential is None:
+        db.add(GoogleCalendarCredential(user_id=row.user_id, refresh_token_encrypted=encrypted))
+    else: credential.refresh_token_encrypted = encrypted
+    row.used_at = datetime.now(timezone.utc)
+    return {"connected": True, "message": "Google Calendar connected."}
+
+@router.get("/google/calendar/status")
+def google_calendar_status(user: UserDep, db: DbDep):
+    return {"connected": db.get(GoogleCalendarCredential, user.id) is not None}
+
+class CalendarEventInput(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    start_at: datetime
+    end_at: datetime
+    timezone: str = Field(default="Asia/Kolkata", max_length=64)
+    description: str | None = Field(default=None, max_length=2000)
+
+@router.post("/calendar/events", status_code=201)
+def add_calendar_event(data: CalendarEventInput, user: UserDep, db: DbDep):
+    if data.start_at.tzinfo is None or data.end_at.tzinfo is None: raise HTTPException(422, "Calendar event times must include timezone offsets.")
+    if data.end_at <= data.start_at: raise HTTPException(422, "Event end must be after its start.")
+    try: event = create_calendar_event(db, user.id, data.model_dump())
+    except GoogleCalendarError as exc: raise HTTPException(exc.status_code, str(exc)) from None
+    return {"id": event["id"], "html_link": event.get("htmlLink"), "status": event.get("status")}
