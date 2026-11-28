@@ -36,7 +36,7 @@ ACTION_REQUEST = re.compile(r"\b(use|open|launch|call|phone|send|message|text|po
 BLINKIT = re.compile(r"\bblinkit\b|ब्लिंकिट", re.IGNORECASE)
 SHOPPING_STATE = TypeAdapter(ShoppingSession)
 CHANGE_ITEMS = re.compile(r"^(?:change|replace) (?:the )?items(?: to)?[ :]+(.+)$", re.IGNORECASE)
-DAILY_COMMAND = re.compile(r"\\b(remind me|set a reminder|reminder|to[- ]?do|todo|task|track (?:an? )?expense|log (?:an? )?expense|plan (?:my )?meal|meal plan|shopping list|draft (?:a )?message|write (?:a )?message)\\b|रिमाइंडर|याद दिला|याद रखना|टू[- ]?डू|काम की सूची|खर्चा|खर्च लिख|खाने का प्लान|खाना प्लान|शॉपिंग लिस्ट|मैसेज लिख", re.IGNORECASE)
+DAILY_COMMAND = re.compile(r"\b(remind me|set a reminder|reminder|to[- ]?do|todo|task|track (?:an? )?expense|log (?:an? )?expense|plan (?:my )?meal|meal plan|shopping list|draft (?:a )?message|write (?:a )?message)\b|रिमाइंडर|याद दिला|याद रखना|टू[- ]?डू|काम की सूची|खर्चा|खर्च लिख|खाने का प्लान|खाना प्लान|शॉपिंग लिस्ट|मैसेज लिख", re.IGNORECASE)
 PREVIOUS_ORDER = re.compile(r"\b(last|previous|prior)\b.{0,30}\b(order|ordered|time)\b|पिछली बार|पिछला ऑर्डर", re.IGNORECASE)
 
 

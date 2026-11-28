@@ -1,0 +1,11 @@
+{
+  "name": "ApnaSathi AI",
+  "short_name": "ApnaSathi",
+  "description": "Your Hindi-first daily personal assistant.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f2",
+  "theme_color": "#f7f6f2",
+  "icons": [{"src":"/apnasathi-icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

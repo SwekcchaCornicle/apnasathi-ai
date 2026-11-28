@@ -213,3 +213,14 @@ h1 em, .form-title em { color: #d3b28a; font-weight: 400; }
 .cognito-links { display:flex; flex-wrap:wrap; gap:15px; margin-top:15px; }
 .cognito-links button { border:0; padding:0; color:#526b50; background:transparent; font-size:11px; cursor:pointer; text-decoration:underline; }
 .form-notice { border-radius:7px; padding:10px 12px; color:#52634d; background:#edf2e8; font-size:11px; line-height:1.5; }
+
+
+.daily-action-list{display:grid;gap:10px;margin-top:14px}
+.daily-action-card{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 15px;border:1px solid rgba(116,103,85,.2);border-radius:16px;background:rgba(255,255,255,.78);flex-wrap:wrap}
+.daily-action-card>div{display:grid;gap:4px;min-width:0}
+.daily-action-card strong{font-size:.92rem;color:var(--ink,#29251f)}
+.daily-action-card span{font-size:.82rem;color:var(--muted,#777067);overflow-wrap:anywhere}
+.daily-action-card button{border:0;border-radius:999px;padding:9px 15px;background:#273d32;color:white;font-weight:650;cursor:pointer}
+.daily-action-card button:disabled{opacity:.55;cursor:wait}
+.daily-action-status{color:#28734b!important;font-weight:700}
+@media(max-width:600px){.daily-action-card{align-items:flex-start}.daily-action-card button{width:100%;min-height:44px}.chat-layout,.chat-main{min-width:0}.chat-composer{padding-bottom:max(12px,env(safe-area-inset-bottom))}}
