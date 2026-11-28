@@ -328,17 +328,24 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                   {message.intent === 'POST_PHOTO' && message.id === messageList.at(-1)?.id && dismissedDraft !== message.id && (
                     <InstagramDraft key={message.id} request={request} onCancel={() => setDismissedDraft(message.id)} />
                   )}
-                  {message.shopping && message.id === messageList.at(-1)?.id && !message.shopping.done && (
+                  {message.shopping && message.id === messageList.findLast((item) => item.shopping)?.id && (
                     <div className="suggestion-row">
                       {message.shopping.session?.items?.length > 0 && (
                         <ul aria-label="Shopping list">
-                          {message.shopping.session.items.map((item) => <li key={item}>{item}</li>)}
+                          {message.shopping.session.items.map((item, index) => {
+                            const link = message.shopping.actions?.[index]
+                            return <li key={item}>{link
+                              ? <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>
+                              : item}</li>
+                          })}
                         </ul>
                       )}
-                      {message.shopping.choices.map((choice) => (
-                        <button key={choice} type="button" onClick={() => void sendText(choice)} disabled={busy || recording}>{choice}</button>
-                      ))}
-                      <button type="button" onClick={() => void sendText('Cancel')} disabled={busy || recording}>End shopping</button>
+                      {!message.shopping.done && message.id === messageList.at(-1)?.id && <>
+                        {message.shopping.choices.map((choice) => (
+                          <button key={choice} type="button" onClick={() => void sendText(choice)} disabled={busy || recording}>{choice}</button>
+                        ))}
+                        <button type="button" onClick={() => void sendText('Cancel')} disabled={busy || recording}>End shopping</button>
+                      </>}
                     </div>
                   )}
                   {message.role === 'assistant' && message.source === 'semantic_cache' && <span className="reuse-note">↻ Reused your previous guidance</span>}

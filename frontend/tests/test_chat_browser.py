@@ -126,7 +126,7 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
                 intent, answer = "POST_PHOTO", "Please attach a photo"
             elif text == "Shop for fixture groceries":
                 intent, answer = "ORDER_GROCERIES", "Choose a store"
-                extra["shopping"] = {"choices": ["Blinkit", "Amazon"], "done": False, "actions": [{"url": "https://blinkit.com/", "label": "Open Blinkit"}], "session": {"items": ["bread", "1 packet of milk", "2 kg potato"]}}
+                extra["shopping"] = {"choices": ["Blinkit", "Amazon"], "done": False, "actions": [{"url": "https://blinkit.com/s/?q=bread", "label": "Find bread on Blinkit"}], "session": {"items": ["bread", "1 packet of milk", "2 kg potato"]}}
             elif text == "Cancel":
                 intent, answer = "ORDER_GROCERIES", "Shopping finished"
                 extra["shopping"] = {"choices": [], "done": True}
@@ -224,7 +224,8 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             send("Shop for fixture groceries")
             expect(page.get_by_role("button", name="Blinkit")).to_be_visible()
             expect(page.get_by_role("list", name="Shopping list").get_by_role("listitem")).to_have_count(3)
-            expect(page.get_by_role("link", name="Open Blinkit")).to_have_count(0)
+            expect(page.get_by_role("link", name="Find bread on Blinkit")).to_have_attribute("href", "https://blinkit.com/s/?q=bread")
+            assert page.evaluate("window.qaPlayback") == []
             page.get_by_role("button", name="End shopping").click()
             expect(page.get_by_text("Shopping finished", exact=True)).to_be_visible()
 

@@ -141,3 +141,15 @@ def test_video_troubleshooting_accepts_text_and_keeps_selected_language():
     assert response.status_code == 200
     assert response.json()["step"] == "confirmed"
     assert response.json()["response"] == "वीडियो चल रहा है।"
+
+
+def test_trace_header_matches_safe_cloudwatch_stages(caplog):
+    from logging import INFO
+
+    fixture = "deliberately-invalid-fixture"
+    with caplog.at_level(INFO, logger="uvicorn.error"), TestClient(app) as client:
+        response = client.post("/api/v1/auth/cognito", json={"id_token": fixture})
+    identifier = response.headers["x-request-id"]
+    assert f"request_id={identifier} stage=request.start" in caplog.text
+    assert f"request_id={identifier} stage=request.complete" in caplog.text
+    assert fixture not in caplog.text

@@ -11,10 +11,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field, TypeAdapter
+from request_tracing import stage
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from agents.shoaping import ShoppingSession, shopping_message, shopping_reply, start_shopping
+from agents.shoaping import ShoppingSession, retailer_item_links, shopping_message, shopping_reply, start_shopping
 from auth.dependencies import get_current_user
 from database.models import Conversation, Memory, Message, SearchHistory, User
 from database.session import get_db
@@ -77,7 +78,7 @@ def _shopping_chat_payload(session: ShoppingSession) -> dict:
     elif session.step == "done":
         message["response"] = "Your shopping list is saved in this chat."
     message.pop("action", None)
-    message.pop("actions", None)
+    message["actions"] = retailer_item_links(session.store, session.items)
     return {**message, "session": asdict(session)}
 
 
@@ -161,6 +162,7 @@ def assistant_chat(
     if cache_allowed:
         try:
             with db.begin_nested():
+                stage("assistant.cache.lookup")
                 match = find_reusable_answer(
                     db, user_id=user.id, question=question,
                     intent="GENERAL_QUESTION", language=language,
@@ -186,6 +188,7 @@ def assistant_chat(
         source = "shopping_guide"
         intent = "ORDER_GROCERIES"
     elif match is not None:
+        stage("assistant.cache.hit")
         response_text = match.answer
         source = "semantic_cache"
         similarity = round(match.similarity, 4)
@@ -230,9 +233,11 @@ def assistant_chat(
                 )
                 context_parts.insert(0, f"Conversation so far: {recent_context}")
             user_context = "\n".join(context_parts)[:6000]
+            stage("assistant.vertex.start")
             classified = vertex_model(question, user_context=user_context, preferred_language=language)
         except VertexUnavailable:
             raise HTTPException(status_code=503, detail="The AI service is temporarily unavailable.") from None
+        stage("assistant.vertex.complete", structured=classified is not None)
         if classified is None:
             raise HTTPException(status_code=502, detail="The AI returned no structured response.")
         intent = classified.intent
@@ -294,6 +299,7 @@ def assistant_chat(
     conversation.updated_at = datetime.now(timezone.utc)
     db.flush()
 
+    stage("assistant.reply.persisted", source=source)
     return AssistantChatResponse(
         conversation_id=conversation.id,
         user_message_id=user_message.id,
@@ -317,6 +323,7 @@ def assistant_audio(
 ):
     """Authenticated voice chat, using the same persistence and semantic lookup flow."""
     _chat_conversation(db, user.id, conversation_id)
+    stage("assistant.audio.validating")
     try:
         validate_audio(audio.file, audio.content_type)
     except AudioStorageError as error:
@@ -334,6 +341,7 @@ def assistant_audio(
         except Exception:
             raise HTTPException(status_code=503, detail="Audio transcription is temporarily unavailable.") from None
 
+    stage("assistant.audio.transcribed", has_speech=bool(transcription))
     if len(transcription) > 4000:
         raise HTTPException(status_code=422, detail="The transcript is too long. Please record a shorter message.")
     if not transcription:

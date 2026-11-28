@@ -132,6 +132,16 @@ def shopping_reply(
     return replace(session, step=step, item_index=0 if session.step == "cart" and not confirmed else session.item_index)
 
 
+def retailer_item_links(store: str | None, items: tuple[str, ...]) -> list[dict[str, str]]:
+    if store not in STORES:
+        return []
+    _, search, query = STORES[store]
+    return [
+        {"label": f"Find {item} on {store}", "url": f"{search}?{urlencode({query: item})}"}
+        for item in items
+    ]
+
+
 def shopping_message(session: ShoppingSession) -> dict:
     """Return chat text, choices, and a retailer link for the current step."""
     step = session.step
@@ -147,8 +157,5 @@ def shopping_message(session: ShoppingSession) -> dict:
         result["action"] = {"label": f"Find {item} on {session.store}" if item else f"Open {session.store}",
                             "url": url}
         if item is not None and session.item_index == 0:
-            result["actions"] = [
-                {"label": f"Find {name} on {session.store}", "url": f"{search}?{urlencode({query: name})}"}
-                for name in session.items
-            ]
+            result["actions"] = retailer_item_links(session.store, session.items)
     return result

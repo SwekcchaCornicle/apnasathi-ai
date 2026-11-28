@@ -8,6 +8,8 @@ import jwt
 from fastapi import HTTPException
 from jwt import PyJWKClient
 
+from request_tracing import stage
+
 logger = logging.getLogger(__name__)
 
 AWS_REGION = os.getenv("COGNITO_REGION", "ap-south-1")
@@ -27,6 +29,7 @@ def verify_cognito_id_token(encoded_token: str) -> dict[str, Any]:
     if not encoded_token or len(encoded_token) > 16000:
         raise HTTPException(status_code=401, detail="Invalid Cognito ID token.")
     try:
+        stage("cognito.verify.start")
         signing_key = _jwks_client().get_signing_key_from_jwt(encoded_token)
         claims = jwt.decode(
             encoded_token,
@@ -49,4 +52,5 @@ def verify_cognito_id_token(encoded_token: str) -> dict[str, Any]:
         raise HTTPException(status_code=403, detail="A verified email address is required.")
     if claims.get("email_verified") not in (True, "true"):
         raise HTTPException(status_code=403, detail="Please verify your email address first.")
+    stage("cognito.verify.success")
     return claims

@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 
 from av.error import FFmpegError
 from fastapi.middleware.cors import CORSMiddleware
+from request_tracing import RequestTracingMiddleware
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).with_name('.env'))
@@ -226,6 +227,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_headers=["Authorization", "Content-Type"],
 )
+app.add_middleware(RequestTracingMiddleware)
 for authenticated_router in (auth_router, assistant_router, knowledge_router, persistence_router):
     app.include_router(authenticated_router, prefix="/api/v1")
 

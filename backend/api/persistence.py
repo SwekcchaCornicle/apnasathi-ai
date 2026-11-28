@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from agents.shoaping import retailer_item_links
 from auth.dependencies import get_current_user
 from database.models import Conversation, Memory, Message, SearchHistory, User
 from database.session import get_db
@@ -146,6 +147,16 @@ def list_conversations(user: Annotated[User, Depends(get_current_user)], db: Ann
     return list(db.scalars(statement))
 
 
+def _assistant_metadata(metadata: dict) -> dict:
+    fields = {key: metadata.get(key) for key in ("source", "shopping", "playback")}
+    if isinstance(shopping := fields["shopping"], dict) and isinstance(session := shopping.get("session"), dict):
+        fields["shopping"] = {
+            **shopping,
+            "actions": retailer_item_links(session.get("store"), tuple(session.get("items") or ())),
+        }
+    return fields
+
+
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageResponse])
 def list_messages(conversation_id: UUID, user: Annotated[User, Depends(get_current_user)], db: Annotated[Session, Depends(get_db)], limit: int = Query(100, ge=1, le=200)):
     _owned_conversation(db, user.id, conversation_id)
@@ -154,7 +165,7 @@ def list_messages(conversation_id: UUID, user: Annotated[User, Depends(get_curre
     ).order_by(Message.created_at.desc(), Message.id.desc()).limit(limit)
     return [
         MessageResponse.model_validate(item, from_attributes=True).model_copy(
-            update={key: item.metadata_json.get(key) for key in ("source", "shopping", "playback")} if item.role == "assistant" else {}
+            update=_assistant_metadata(item.metadata_json) if item.role == "assistant" else {}
         )
         for item in reversed(list(db.scalars(statement)))
     ]

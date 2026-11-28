@@ -4,6 +4,7 @@ import os
 from functools import lru_cache
 from typing import Generator
 from sqlalchemy import URL, create_engine
+from request_tracing import stage
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -36,12 +37,15 @@ def get_session_factory() -> sessionmaker[Session]:
     return sessionmaker(bind=get_engine(), autoflush=False, expire_on_commit=False)
 
 def get_db() -> Generator[Session, None, None]:
+    stage("db.session.start")
     session = get_session_factory()()
     try:
         yield session
         session.commit()
+        stage("db.commit")
     except Exception:
         session.rollback()
+        stage("db.rollback")
         raise
     finally:
         session.close()

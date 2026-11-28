@@ -99,7 +99,7 @@ def test_isolated_accounts_chat_voice_history_and_real_vector_cache():
         llm.return_value = shopping
         order = client.post("/api/v1/assistant/chat", json=payload | {"message": "Order 2 apples and 1 litre milk from Blinkit."}, headers=a).json()
         assert order["intent"] == "ORDER_GROCERIES"
-        assert order["shopping"]["step"] == "item" and "actions" not in order["shopping"]
+        assert order["shopping"]["step"] == "item" and len(order["shopping"]["actions"]) == 2
         assert order["shopping"]["session"]["store"] == "Blinkit"
         guide_calls = llm.call_count
         add = client.post("/api/v1/assistant/chat", json=payload | {"message": "Yes"}, headers=a).json()
