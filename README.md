@@ -11,9 +11,22 @@
 
 ---
 
-ApnaSathi is a web application where a person can speak or type naturally and ask for help with everyday tasks such as shopping, finding where a movie or series is available, preparing an Instagram photo post, or asking a general question. The goal is to make common digital workflows easier to understand and complete, especially for people who are more comfortable speaking than navigating several apps.
+**ApnaSathi is a personal AI companion for everyday digital life.** Instead of jumping between screens and menus, you can simply type or speak what you need — in English or Hindi — and let the assistant guide you through the next step.
 
-The project combines a React frontend, a FastAPI backend, Gemini on Google Vertex AI for structured intent understanding, local multilingual E5 embeddings for semantic answer reuse, Amazon Cognito authentication, PostgreSQL data models, private S3 audio storage, and AWS infrastructure provisioned with CDK.
+From shopping guidance and streaming discovery to Instagram photo drafts and everyday questions, ApnaSathi turns natural language into structured, useful workflows. **You stay in control:** the assistant explains, prepares and guides; you review and confirm actions.
+
+### ✨ The experience, at a glance
+
+<table>
+  <tr>
+    <td width="25%" align="center"><h2>💬</h2><b>Talk naturally</b><br/><sub>Type or speak in your language</sub></td>
+    <td width="25%" align="center"><h2>🧠</h2><b>Understand intent</b><br/><sub>Gemini turns requests into structured intent</sub></td>
+    <td width="25%" align="center"><h2>🧭</h2><b>Get guided actions</b><br/><sub>Purpose-built flows help with tasks</sub></td>
+    <td width="25%" align="center"><h2>🔐</h2><b>Stay in control</b><br/><sub>You review before external actions</sub></td>
+  </tr>
+</table>
+
+**Under the hood:** React + Vite power the experience; FastAPI coordinates requests; Gemini on Vertex AI understands intent; multilingual E5 embeddings support semantic answer reuse; PostgreSQL stores application data; and AWS CDK defines the cloud infrastructure.
 
 > **A quick note about the cloud setup**
 >
@@ -21,7 +34,9 @@ The project combines a React frontend, a FastAPI backend, Gemini on Google Verte
 
 ---
 
-## Contents
+## Contents 🧭
+
+<sub>A guided tour from the product experience to the infrastructure behind it.</sub>
 
 - [1. Product overview](#1-product-overview)
 - [2. Application screenshots](#2-application-screenshots)
@@ -45,9 +60,9 @@ The project combines a React frontend, a FastAPI backend, Gemini on Google Verte
 
 ---
 
-## 1. Product overview
+## 1. Product overview 🌱
 
-### What problem does ApnaSathi solve?
+### What problem does ApnaSathi solve? 🎯
 
 A normal digital task can involve several steps: opening an application, finding the right screen, understanding a form, choosing an option, and confirming an action. That can be frustrating for someone who does not know the application well or who prefers speaking in their own language.
 
@@ -61,7 +76,7 @@ ApnaSathi brings a conversational interface in front of selected workflows. A us
 
 The assistant does not treat every sentence as the same kind of chat. It uses a structured intent response and routes the request to the relevant workflow.
 
-### What is available in the current code?
+### What is available in the current code? ✨
 
 | Capability | What the implementation does |
 | --- | --- |
@@ -76,7 +91,7 @@ The assistant does not treat every sentence as the same kind of chat. It uses a 
 | Speech response | Uses local Piper voice models for English and Hindi in supported response paths |
 | Semantic answer reuse | Implements multilingual E5 embeddings and pgvector-backed answer matching for eligible general questions; see the integration boundary in [Section 18](#18-current-implementation-boundaries) |
 
-### A simple example
+### A simple example 💡
 
 Imagine the user types:
 
@@ -98,29 +113,29 @@ The application roughly does this:
 
 ---
 
-## 2. Application screenshots
+## 2. Application screenshots 📱
 
 These screenshots were captured from the running ApnaSathi application after signing in. They show the real React interface served by the deployed API Gateway endpoint. The mobile image was captured at a 390 × 844 viewport.
 
-### Authenticated chat workspace — desktop
+### Authenticated chat workspace — desktop 🖥️
 
 ![ApnaSathi authenticated chat workspace on desktop](docs/screenshots/04-chat-workspace-desktop.jpg)
 
 The workspace brings the assistant prompt, new-chat action, suggested starting points, message composer, microphone control, language selector, and account sign-out into one place. The suggestions shown are starting prompts; choosing one begins a conversation with that workflow.
 
-### Authenticated chat workspace — mobile
+### Authenticated chat workspace — mobile 📱
 
 ![ApnaSathi authenticated chat workspace on mobile](docs/screenshots/04-chat-workspace-mobile.jpg)
 
 The same workspace is available in a narrow mobile layout. This is useful for a voice-first assistant because users can open the experience from a phone and start with a short text or spoken request.
 
-### Other workflow screens
+### Other workflow screens 🧭
 
 The repository also contains the language-selection and Cognito account screens, guided shopping logic, Watchmode lookup and troubleshooting, and the Instagram photo-draft workflow. Those screens are implemented in the source code, but are not represented by screenshots in this capture set. This README deliberately avoids using mockups or generated images as if they were screenshots of the running product.
 
 ---
 
-## The ApnaSathi look & feel
+## The ApnaSathi look & feel 🎨
 
 The README follows the same visual language as the product: forest green for confident surfaces, sage for calm panels, warm sand for highlights, and soft paper backgrounds for readability.
 
@@ -128,7 +143,7 @@ The README follows the same visual language as the product: forest green for con
 
 ---
 
-## 3. High-level architecture
+## 3. High-level architecture 🏗️
 
 At a high level, ApnaSathi has four major areas:
 
@@ -137,7 +152,7 @@ At a high level, ApnaSathi has four major areas:
 3. **AI and integrations:** Gemini on Vertex AI classifies the request; local multilingual E5 embeddings are used by the semantic answer-reuse service; workflow modules connect to retailers, Watchmode, Meta, speech, and AWS storage.
 4. **Cloud platform:** CDK defines the AWS network, PostgreSQL database, S3 audio bucket, ECR repository, ECS Fargate service, Application Load Balancer, IAM roles, and CloudWatch logs.
 
-### System context diagram
+### System context diagram 🌐
 
 ![ApnaSathi request journey — visual sequence diagram](docs/architecture/request-journey.svg)
 
@@ -146,7 +161,7 @@ At a high level, ApnaSathi has four major areas:
 
 This diagram shows the logical integrations. It does not imply that every feature is invoked for every request. For example, a normal general question does not need Watchmode or the Instagram Graph API.
 
-### Runtime deployment diagram
+### Runtime deployment diagram ☁️
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -180,7 +195,7 @@ flowchart TB
 ```
 
 
-### Step 1 — User enters a request
+### Step 1 — User enters a request ➡️
 
 The user types a message in `ChatWorkspace.jsx`. The frontend keeps the current conversation ID and builds a JSON request:
 
@@ -191,7 +206,7 @@ The user types a message in `ChatWorkspace.jsx`. The frontend keeps the current 
 }
 ```
 
-### Step 2 — React calls the backend
+### Step 2 — React calls the backend ➡️
 
 The `apiRequest()` helper in `frontend/src/ChatWorkspace.jsx` sends the request to:
 
@@ -203,7 +218,7 @@ Content-Type: application/json
 
 The API base URL comes from `VITE_API_BASE_URL`. For local development it can point to `http://localhost:8000/api/v1`; for the hosted frontend the deployment workflow builds with `/api/v1`.
 
-### Step 3 — FastAPI verifies the request context
+### Step 3 — FastAPI verifies the request context ➡️
 
 The assistant endpoint receives the authenticated `User` through `get_current_user` and a SQLAlchemy database session through `get_db`.
 
@@ -217,11 +232,11 @@ It checks that:
 
 This ownership check matters. Knowing another person's conversation UUID must not grant access to their messages.
 
-### Step 4 — The message is persisted
+### Step 4 — The message is persisted ➡️
 
 The backend creates the user message and associates it with the user and conversation. This gives the request a durable place in conversation history.
 
-### Step 5 — The assistant selects the processing path
+### Step 5 — The assistant selects the processing path ➡️
 
 The assistant checks whether the message is eligible for a reusable-answer lookup. Action requests, requests for current information, active shopping workflows, and some history-dependent requests are excluded from that optimization.
 
@@ -229,7 +244,7 @@ For eligible general questions, the semantic lookup helper can compare the query
 
 When there is no reusable answer, the backend prepares context from recent messages and applicable saved memories, then invokes the Gemini model through Vertex AI.
 
-### Step 6 — Gemini returns structured intent
+### Step 6 — Gemini returns structured intent ➡️
 
 The LLM is configured to return JSON matching the Pydantic `IntentSchema`. The schema includes:
 
@@ -245,7 +260,7 @@ The LLM is configured to return JSON matching the Pydantic `IntentSchema`. The s
 
 The backend does not need to guess what an unstructured paragraph means. It reads the validated fields and routes to the correct handler.
 
-### Step 7 — A workflow performs the next step
+### Step 7 — A workflow performs the next step ➡️
 
 Examples:
 
@@ -255,11 +270,11 @@ Examples:
 - `GENERAL_QUESTION` or `GENERAL_CONVERSATION` returns the model's response.
 - `OPEN_APP` currently returns a confirmation-oriented response; it does not demonstrate unrestricted operating-system control.
 
-### Step 8 — Result is saved and returned
+### Step 8 — Result is saved and returned ➡️
 
 The backend persists the assistant message and a search-history record, updates the conversation timestamp, and returns a structured response containing the answer, intent, language, source, and any workflow payload.
 
-### Request sequence diagram
+### Request sequence diagram 🔄
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -295,9 +310,9 @@ sequenceDiagram
 
 ---
 
-## 5. Frontend architecture
+## 5. Frontend architecture 🖥️
 
-### Technology choices
+### Technology choices 🧰
 
 | Technology | Purpose |
 | --- | --- |
@@ -313,7 +328,7 @@ sequenceDiagram
 
 The dependencies and scripts are defined in `frontend/package.json`.
 
-### Frontend component map
+### Frontend component map 🧩
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -436,9 +451,9 @@ The API routers are mounted by `backend/app.py`. Refer to the route functions fo
 
 ---
 
-## 6. Backend architecture
+## 6. Backend architecture ⚙️
 
-### Technology choices
+### Technology choices 🧰
 
 | Technology | Purpose |
 | --- | --- |
@@ -458,7 +473,7 @@ The API routers are mounted by `backend/app.py`. Refer to the route functions fo
 | PyJWT | Cognito token verification |
 | requests | External HTTP APIs |
 
-### Backend package structure
+### Backend package structure 🗂️
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -576,7 +591,7 @@ These modules keep workflow details separate from the general API handler.
 
 This module validates audio types and file signatures, enforces a 25 MiB file limit, generates server-owned UUID object keys, and writes objects to the configured S3 bucket. It uses server-side encryption and does not expose the object key in the upload response.
 
-### API request path at a glance
+### API request path at a glance 🛤️
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -598,7 +613,7 @@ flowchart TD
 
 ---
 
-## 7. AI, LLM, embeddings, and intent routing
+## 7. AI, LLM, embeddings, and intent routing 🧠
 
 This is the important distinction in the AI design:
 
@@ -608,7 +623,7 @@ This is the important distinction in the AI design:
 
 These components have different jobs and are not interchangeable.
 
-### 7.1 Gemini on Google Vertex AI
+### 7.1 Gemini on Google Vertex AI 🔹
 
 The current model call is configured in `backend/llm_model/llm_model.py`:
 
@@ -623,7 +638,7 @@ For shopping item extraction, a separate call uses `gemini-3.1-flash-lite` with 
 
 Model identifiers are code-level configuration. Confirm model availability and access in the target Google Cloud project before deployment.
 
-### 7.2 Intent schema
+### 7.2 Intent schema 🔹
 
 The intent schema currently supports:
 
@@ -640,7 +655,7 @@ The intent schema currently supports:
 
 The schema also carries the detected application, show name, shopping items, confidence, response language, entities, and whether the next step requires confirmation.
 
-### 7.3 Why use embeddings?
+### 7.3 Why use embeddings? 🔹
 
 A language model call is useful for interpreting a new request, but some users may ask the same informational question repeatedly using different wording.
 
@@ -655,7 +670,7 @@ The wording differs, but the meaning may be close. Exact string matching is not 
 
 An embedding model converts a sentence into a fixed-size vector. Similar meanings are represented by vectors that can be close under a similarity metric.
 
-### 7.4 Multilingual E5 embeddings
+### 7.4 Multilingual E5 embeddings 🔹
 
 The embedding implementation is in `backend/embeddings/e5.py`.
 
@@ -676,7 +691,7 @@ The query/passage prefixes are part of the E5 retrieval convention. Query and pa
 
 The application can create query vectors inside the backend instead of making a separate hosted embedding API request. The model can be cached in the container image and used for inference on the ECS task. This reduces a separate external inference dependency for this part of the pipeline, although it still consumes local CPU and memory.
 
-### 7.5 Semantic answer reuse
+### 7.5 Semantic answer reuse 🔹
 
 The service in `backend/services/answer_reuse.py` applies several checks before returning a saved answer:
 
@@ -693,7 +708,7 @@ The service in `backend/services/answer_reuse.py` applies several checks before 
 
 Action requests and current-information questions are not supposed to be answered from this cache. For example, a shopping request should not be replayed because an older request happened to have similar wording.
 
-### 7.6 Retrieval and LLM flow
+### 7.6 Retrieval and LLM flow 🔹
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -717,7 +732,7 @@ flowchart TD
 
 **Implementation boundary:** the repository contains the embedding model, pgvector schema, semantic lookup service, knowledge endpoint, and assistant lookup call. However, the root/backend documentation notes that the first database migration originally established the schema without completing every embedding inference and cache-write integration. The current code has since added service and call-site logic, but the full path must be verified against the deployed database, migration state, and end-to-end tests before describing it as a production-proven retrieval system. See [Section 18](#18-current-implementation-boundaries).
 
-### 7.7 Conversation context and memory
+### 7.7 Conversation context and memory 🔹
 
 Before a Gemini fallback call, the assistant can assemble:
 
@@ -731,9 +746,9 @@ The `memories` table is user-scoped and supports a category, key, value, confide
 
 ---
 
-## 8. Application workflows
+## 8. Application workflows 🧩
 
-### 8.1 Shopping workflow
+### 8.1 Shopping workflow 🔹
 
 The shopping logic lives in `backend/agents/shoaping.py`. The intentionally step-based design means the application does not attempt to complete a purchase on behalf of the user.
 
@@ -771,7 +786,7 @@ stateDiagram-v2
 
 The backend returns retailer search links, prompts, and yes/no choices. The user opens the retailer and independently signs in, selects products, reviews their cart, enters delivery information, and completes payment.
 
-### 8.2 Watch-show workflow
+### 8.2 Watch-show workflow 🔹
 
 The title lookup helper in `backend/agents/watch_show/watch_show.py` calls the Watchmode API.
 
@@ -787,7 +802,7 @@ At a high level:
 
 The separate `troubleshoot.py` helper uses a deterministic state machine. It asks whether the tab opened, whether the user signed in, and whether the video is playing. A recognized yes/no answer advances the next step. It does not call the LLM for this simple confirmation state machine.
 
-### 8.3 Instagram photo workflow
+### 8.3 Instagram photo workflow 🔹
 
 The Instagram workflow uses the Meta Graph API and a professional Instagram account linked to a Facebook Page.
 
@@ -824,7 +839,7 @@ The code keeps Instagram credentials out of repr-visible dataclass fields and us
 
 The workflow is not equivalent to an unrestricted Instagram automation. It depends on Meta permissions, a professional account setup, a valid callback configuration, and user authorization. Test with an approved professional test account.
 
-### 8.4 Voice input and voice response
+### 8.4 Voice input and voice response 🔹
 
 **Voice input:**
 
@@ -847,7 +862,7 @@ The standalone recorder and chat workspace have different presentation code; do 
 
 ---
 
-## 9. Database design
+## 9. Database design 🗃️
 
 ### Database technology
 
@@ -862,7 +877,7 @@ The database layer is built around:
 
 The database connection is created in `backend/database/session.py`. It accepts either a complete `DATABASE_URL` or the RDS connection fields and JSON credentials injected into the ECS task.
 
-### Entity relationship diagram
+### Entity relationship diagram 🔗
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -979,7 +994,7 @@ erDiagram
 
 The diagram includes the Instagram drafts table created in the second migration. It shows the logical ownership relationships; the exact column definitions and constraints are in `backend/database/models.py` and the Alembic migration files.
 
-### Table-by-table explanation
+### Table-by-table explanation 📚
 
 #### `users`
 
@@ -1075,7 +1090,7 @@ The existence of this table does not by itself prove that every workflow current
 
 The second migration creates a user-owned Instagram draft table. It contains draft state, a hashed state reference, image metadata/content, caption, phase, expiry, notice, and Meta media ID. It is associated with `users` and deletes when the owner is deleted.
 
-### Migration history
+### Migration history 🧬
 
 | Migration | Purpose |
 | --- | --- |
@@ -1105,7 +1120,7 @@ The engine uses `pool_pre_ping`, a small configurable pool, a maximum overflow, 
 
 ---
 
-## 10. Audio and file storage
+## 10. Audio and file storage 🎙️
 
 ### Browser storage versus backend storage
 
@@ -1157,7 +1172,7 @@ The backend notes state that anonymous audio keys do not contain a user-provided
 
 ---
 
-## 11. AWS architecture
+## 11. AWS architecture ☁️
 
 ### AWS services used in the design
 
@@ -1188,7 +1203,7 @@ The official AWS service icons below make the cloud building blocks easier to sc
 
 The infrastructure source is under `aws_cloud/` and uses AWS CDK in Python. The current target region is **Asia Pacific (Mumbai), `ap-south-1`**.
 
-### 11.1 Infrastructure stack breakdown
+### 11.1 Infrastructure stack breakdown 🔹
 
 The CDK app defines four stacks and creates them with cross-stack references:
 
@@ -1201,7 +1216,7 @@ The CDK app defines four stacks and creates them with cross-stack references:
 
 The stack creation and context validation are in `aws_cloud/app.py`.
 
-### 11.2 Network — VPC, subnets and security
+### 11.2 Network — VPC, subnets and security 🔹
 
 The network stack defines:
 
@@ -1221,7 +1236,7 @@ The network stack defines:
 
 The ALB sits in public subnets. ECS tasks and RDS are placed in private subnets. The backend security group does not permit arbitrary inbound traffic from the internet.
 
-### Network diagram
+### Network diagram 🗺️
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -1252,7 +1267,7 @@ flowchart TB
     ECS --> ENDPOINTS
 ```
 
-### 11.3 Outbound connectivity
+### 11.3 Outbound connectivity 🔹
 
 The CDK supports three egress choices via the `networkEgress` context:
 
@@ -1262,7 +1277,7 @@ The CDK supports three egress choices via the `networkEgress` context:
 
 This choice matters because Vertex AI, Watchmode, and Meta are external services. A private ECS task needs a permitted route to those services. VPC endpoints alone do not provide general internet access.
 
-### 11.4 RDS PostgreSQL
+### 11.4 RDS PostgreSQL 🔹
 
 The database stack defines:
 
@@ -1287,7 +1302,7 @@ The RDS instance is intended to be reachable only from the backend security grou
 
 **Important:** CDK provisioning creates the database instance; Alembic creates the application schema. Those are separate operations.
 
-### 11.5 Amazon S3
+### 11.5 Amazon S3 🔹
 
 The shared infrastructure stack defines two buckets:
 
@@ -1304,7 +1319,7 @@ The audio bucket is configured with:
 
 The backend task role receives object-level permissions for the `audio/*` prefix. Do not make the audio bucket public to support audio playback; authenticated retrieval should be implemented through an explicit authorization path.
 
-### 11.6 Amazon ECR
+### 11.6 Amazon ECR 🔹
 
 The application stack defines an ECR repository named:
 
@@ -1322,7 +1337,7 @@ It uses:
 
 The application workflow tags each built image with the Git commit SHA. This gives each application deployment an immutable image identifier.
 
-### 11.7 Amazon ECS Fargate
+### 11.7 Amazon ECS Fargate 🔹
 
 The application stack defines:
 
@@ -1339,7 +1354,7 @@ The application stack defines:
 
 The repository's older backend run notes mention different resource values in one section. The current CDK source is the authority for the infrastructure definition, so re-check the task definition and runtime metrics before sizing production capacity.
 
-### 11.8 Application Load Balancer
+### 11.8 Application Load Balancer 🔹
 
 The ALB is internet-facing and lives in public subnets. In the current CDK source it listens on HTTP port 80 and forwards to an IP target group on port 8000.
 
@@ -1353,7 +1368,7 @@ The health check verifies that the backend process responds. It does not prove t
 
 The GitHub application workflow also checks an HTTPS API Gateway gateway URL after publishing. The ALB listener and the gateway are separate infrastructure concepts; follow the deployed route and DNS configuration to understand the actual public request path.
 
-### 11.9 IAM roles and secret delivery
+### 11.9 IAM roles and secret delivery 🔹
 
 The application stack creates two ECS roles with different responsibilities.
 
@@ -1380,7 +1395,7 @@ Used by code inside the running container to call AWS APIs. The current policy g
 
 Secret values are injected into the ECS task definition using secret references. Keep the actual values out of GitHub source, Docker build arguments, and frontend variables.
 
-### 11.10 Google Workload Identity Federation
+### 11.10 Google Workload Identity Federation 🔹
 
 The backend calls Vertex AI, but the runtime is in AWS. The deployment notes document a cross-cloud identity design:
 
@@ -1395,7 +1410,7 @@ This avoids putting a permanent Google service-account key inside the image or r
 
 The CDK and deployment notes require the Google project, WIF secret ARN, and appropriate IAM bindings to be configured. A project ID alone does not authenticate the ECS task.
 
-### 11.11 AWS component interaction diagram
+### 11.11 AWS component interaction diagram 🔹
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -1429,7 +1444,7 @@ flowchart LR
 
 ---
 
-## 12. Docker and container design
+## 12. Docker and container design 🐳
 
 ### Dockerfile stages and decisions
 
@@ -1478,7 +1493,7 @@ The password in this compose file is for local QA only. Never reuse it in AWS or
 
 ---
 
-## 13. GitHub Actions and YAML pipelines
+## 13. GitHub Actions and YAML pipelines 🚀
 
 There are three workflow files:
 
@@ -1490,7 +1505,7 @@ There are three workflow files:
 
 The deployment workflows use `workflow_dispatch`, so they are manually started from GitHub Actions. They use a shared concurrency group to prevent overlapping ECS deployments.
 
-### 13.1 GitHub OIDC — why it is used
+### 13.1 GitHub OIDC — why it is used 🔹
 
 The workflows request:
 
@@ -1511,7 +1526,7 @@ The repository includes:
 
 The trust policy should restrict who can assume the role to the expected repository and branch/environment subject. The permissions policy should grant only the actions needed for the relevant deployment job.
 
-### 13.2 Bootstrap workflow
+### 13.2 Bootstrap workflow 🔹
 
 The reusable `bootstrap.yaml` workflow:
 
@@ -1525,7 +1540,7 @@ The reusable `bootstrap.yaml` workflow:
 
 It deliberately does not use the ordinary deployment role to create the initial bootstrap resources.
 
-### 13.3 Infrastructure deployment workflow
+### 13.3 Infrastructure deployment workflow 🔹
 
 The infrastructure workflow runs the bootstrap workflow first. It then:
 
@@ -1542,7 +1557,7 @@ The infrastructure workflow runs the bootstrap workflow first. It then:
 
 The default network egress mode in the workflow is `none`. NAT or proxy should be selected only after the related cost, routing, and security choices have been reviewed.
 
-### 13.4 Application deployment workflow
+### 13.4 Application deployment workflow 🔹
 
 The application workflow also starts with the bootstrap check. Its deployment job then:
 
@@ -1564,7 +1579,7 @@ The application workflow also starts with the bootstrap check. Its deployment jo
 
 This pipeline is a manual release workflow. A successful container health check is a startup test, not a complete integration test of all third-party services.
 
-### CI/CD diagram
+### CI/CD diagram 🚦
 
 ```mermaid
   %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
@@ -1596,7 +1611,7 @@ flowchart TD
 
 The infrastructure and application workflows are launched separately. The diagram shows their shared bootstrap dependency; it should not be read as one workflow automatically running both deployments in sequence.
 
-### 13.5 Important YAML terms
+### 13.5 Important YAML terms 🔹
 
 | YAML element | Meaning in these workflows |
 | --- | --- |
@@ -1614,7 +1629,7 @@ The infrastructure and application workflows are launched separately. The diagra
 | `secrets.*` | Encrypted GitHub secrets (not the same as AWS Secrets Manager) |
 | `GITHUB_OUTPUT` | Mechanism for a step to publish outputs to later steps |
 
-### 13.6 GitHub variables to configure
+### 13.6 GitHub variables to configure 🔹
 
 The checked-in workflow reads these variable names. Configure only the values needed for the environment and check the workflow before changing their meaning.
 
@@ -1643,9 +1658,9 @@ Some workflows also provide development defaults for the Cognito IDs and fronten
 
 ---
 
-## 14. Local development
+## 14. Local development 💻
 
-### Prerequisites
+### Prerequisites 📋
 
 Install:
 
@@ -1818,7 +1833,7 @@ The Dockerfile starts Uvicorn on port 8000. The full authenticated workflow also
 
 ---
 
-## 15. Configuration reference
+## 15. Configuration reference 🔧
 
 Configuration is separated by runtime boundary.
 
@@ -1869,7 +1884,7 @@ Do not commit real environment files. Keep secrets in a secret manager and grant
 
 ---
 
-## 16. Tests and validation
+## 16. Tests and validation 🧪
 
 The repository has separate test areas for backend behaviour, infrastructure helpers, and browser interaction.
 
@@ -1941,7 +1956,7 @@ npx --yes aws-cdk@2.1149.0 synth --no-lookups
 
 Use the same context values intended for deployment. A successful synthesis confirms that CDK can generate a CloudFormation template; it does not mean AWS resources have been created.
 
-### Integration validation checklist
+### Integration validation checklist ✅
 
 Before calling a release ready, test more than the health endpoint:
 
@@ -1964,7 +1979,7 @@ Before calling a release ready, test more than the health endpoint:
 
 ---
 
-## 17. Security and operational considerations
+## 17. Security and operational considerations 🛡️
 
 ### Authentication and authorization
 
@@ -2001,7 +2016,7 @@ The current CDK source is development-oriented in several places (for example, s
 
 ---
 
-## 18. Current implementation boundaries
+## 18. Current implementation boundaries 📌
 
 This section is intentionally explicit. It separates what is visible in source code from assumptions that would need deployment or integration evidence.
 
@@ -2056,7 +2071,7 @@ A CDK construct describes desired infrastructure. Use CloudFormation stack outpu
 
 ---
 
-## 19. Repository layout
+## 19. Repository layout 🗂️
 
 A simplified repository map:
 
@@ -2155,7 +2170,7 @@ apnasathi-ai/
 
 ---
 
-## Final note
+## Final note 💚
 
 ApnaSathi is built around a simple idea: **technology should adapt to the way people communicate, not the other way around.**
 
