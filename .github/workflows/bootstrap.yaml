@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Validate workflow and role settings
         env:
-          CHECK_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          CHECK_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN || vars.AWS_ROLE_ARN }}
           DEPLOY_ROLE: ${{ vars.AWS_ROLE_ARN }}
         run: |
           set -euo pipefail
@@ -31,7 +31,7 @@ jobs:
       - name: Authenticate for the bootstrap check
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          role-to-assume: ${{ vars.INFRASTRUCTURE_ROLE_ARN || vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Check CDKToolkit
@@ -59,7 +59,7 @@ jobs:
         if: steps.toolkit.outputs.missing == 'true'
         env:
           BOOTSTRAP_ROLE: ${{ vars.BOOTSTRAP_ROLE_ARN }}
-          INFRA_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN }}
+          INFRA_ROLE: ${{ vars.INFRASTRUCTURE_ROLE_ARN || vars.AWS_ROLE_ARN }}
           DEPLOY_ROLE: ${{ vars.AWS_ROLE_ARN }}
         run: |
           set -euo pipefail

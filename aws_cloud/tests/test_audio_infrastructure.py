@@ -20,6 +20,10 @@ class AudioInfrastructureTests(unittest.TestCase):
             "backendImageTag": "preflight-arm64",
             "cognitoUserPoolId": "ap-south-1_PoolFixture",
             "cognitoClientId": "clientfixture",
+            "instagramSecretArn": "arn:aws:secretsmanager:ap-south-1:111111111111:secret:instagram-Ab12Cd",
+            "instagramSecretJsonKey": "App secret",
+            "instagramApiVersion": "v25.0",
+            "instagramImageOrigin": "https://example.test",
             "googleCloudProject": "example-project",
             "googleWifSecretArn": "arn:aws:secretsmanager:ap-south-1:111111111111:secret:vertex-config-Ab12Cd",
         }
@@ -43,6 +47,15 @@ class AudioInfrastructureTests(unittest.TestCase):
             key: value for key, value in self.templates[stack]["Resources"].items()
             if value["Type"] == kind
         }
+
+    def test_instagram_reads_the_selected_json_field(self):
+        [task] = self.resources("Application", "AWS::ECS::TaskDefinition").values()
+        [container] = task["Properties"]["ContainerDefinitions"]
+        secrets = {entry["Name"]: entry["ValueFrom"] for entry in container["Secrets"]}
+        self.assertEqual(
+            secrets["INSTAGRAM_APP_SECRET"],
+            "arn:aws:secretsmanager:ap-south-1:111111111111:secret:instagram-Ab12Cd:App secret::",
+        )
 
     def test_ecs_can_receive_public_cognito_configuration(self):
         tasks = self.resources("Application", "AWS::ECS::TaskDefinition")
@@ -121,6 +134,20 @@ class AudioInfrastructureTests(unittest.TestCase):
         }
         self.assertEqual(private_subnets, {"PrivateSubnetA", "PrivateSubnetB"})
         self.assertFalse(self.resources("Network", "AWS::EC2::NatGateway"))
+
+    def test_ecs_memory_autoscaling_matches_live_service(self):
+        [target] = self.resources("Application", "AWS::ApplicationAutoScaling::ScalableTarget").values()
+        self.assertEqual(target["Properties"]["MinCapacity"], 1)
+        self.assertEqual(target["Properties"]["MaxCapacity"], 3)
+        self.assertEqual(target["Properties"]["ScalableDimension"], "ecs:service:DesiredCount")
+        [policy] = self.resources("Application", "AWS::ApplicationAutoScaling::ScalingPolicy").values()
+        config = policy["Properties"]["TargetTrackingScalingPolicyConfiguration"]
+        self.assertEqual(config, {
+            "PredefinedMetricSpecification": {"PredefinedMetricType": "ECSServiceAverageMemoryUtilization"},
+            "TargetValue": 65,
+            "ScaleInCooldown": 300,
+            "ScaleOutCooldown": 60,
+        })
 
     def test_first_service_rollout_configuration(self):
         service = next(iter(self.resources("Application", "AWS::ECS::Service").values()))["Properties"]

@@ -105,11 +105,9 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             if b"Yes" in (request.post_data_buffer or b""):
                 result = {"step": "confirmed", "response": "The video is playing.", "done": True}
         elif path == "/instagram/photo":
-            result = {"step": "authorization", "action": {"url": "https://www.instagram.com/oauth/authorize"}}
-        elif path == "/instagram/status":
-            result = {"step": "caption"}
-        elif path == "/instagram/publish":
             instagram_publish_attempts.append(request.post_data_buffer)
+            result = {"step": "authorization", "action": {"url": "https://www.facebook.com/dialog/oauth"}}
+        elif path == "/instagram/status":
             result = {"step": "published", "response": "Fixture post confirmed"}
         elif path == "/assistant/chat":
             if unavailable:
@@ -126,7 +124,18 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
                 intent, answer = "POST_PHOTO", "Please attach a photo"
             elif text == "Shop for fixture groceries":
                 intent, answer = "ORDER_GROCERIES", "Choose a store"
-                extra["shopping"] = {"choices": ["Blinkit", "Amazon"], "done": False, "actions": [{"url": "https://blinkit.com/s/?q=bread", "label": "Find bread on Blinkit"}], "session": {"items": ["bread", "1 packet of milk", "2 kg potato"]}}
+                extra["shopping"] = {"choices": ["Blinkit", "Amazon"], "done": False, "actions": [], "session": {"items": ["bread", "1 packet of milk", "2 kg potato"]}}
+            elif text == "Blinkit":
+                intent, answer = "ORDER_GROCERIES", "Did your link work?"
+                extra["shopping"] = {
+                    "choices": ["Yes", "No"], "done": False,
+                    "actions": [
+                        {"label": "Find bread on Blinkit", "url": "https://blinkit.com/s/?q=bread"},
+                        {"label": "Find milk on Blinkit", "url": "https://blinkit.com/s/?q=milk"},
+                        {"label": "Find potato on Blinkit", "url": "https://blinkit.com/s/?q=potato"},
+                    ],
+                    "session": {"store": "Blinkit", "items": ["bread", "1 packet of milk", "2 kg potato"]},
+                }
             elif text == "Cancel":
                 intent, answer = "ORDER_GROCERIES", "Shopping finished"
                 extra["shopping"] = {"choices": [], "done": True}
@@ -184,7 +193,7 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             window.qaPlayback = [];
             window.speechSynthesis.speak = (utterance) => window.qaSpeech.push(utterance.text);
             window.open = () => ({
-              document: { body: {} },
+              document: document.implementation.createHTMLDocument(),
               closed: false,
               close() { this.closed = true; },
               location: { replace: (url) => window.qaPlayback.push(url) },
@@ -224,6 +233,8 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             send("Shop for fixture groceries")
             expect(page.get_by_role("button", name="Blinkit")).to_be_visible()
             expect(page.get_by_role("list", name="Shopping list").get_by_role("listitem")).to_have_count(3)
+            expect(page.get_by_role("link", name="Find bread on Blinkit")).to_have_count(0)
+            page.get_by_role("button", name="Blinkit").click()
             expect(page.get_by_role("link", name="Find bread on Blinkit")).to_have_attribute("href", "https://blinkit.com/s/?q=bread")
             assert page.evaluate("window.qaPlayback") == []
             page.get_by_role("button", name="End shopping").click()
@@ -231,8 +242,7 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
 
             send("Watch a fixture video")
             expect(page.get_by_role("link", name="Open in Netflix")).to_have_attribute("href", "https://www.netflix.com/")
-            assert page.evaluate("window.qaPlayback") == []
-            page.get_by_role("button", name="Troubleshoot playback").click()
+            assert page.evaluate("window.qaPlayback") == ["https://www.netflix.com/"]
             expect(page.get_by_text("Is the video playing?", exact=True)).to_be_visible()
             page.get_by_role("button", name="Yes").click()
             expect(page.get_by_text("The video is playing.", exact=True)).to_be_visible()
@@ -242,13 +252,13 @@ def test_signup_confirmation_srp_chat_recovery_and_history(frontend_url, languag
             expect(page.get_by_role("button", name="Attach photo")).to_be_disabled()
             page.get_by_label("Choose a JPEG").set_input_files({"name": "fixture.jpg", "mimeType": "image/jpeg", "buffer": b"jpeg-fixture"})
             page.get_by_role("button", name="Attach photo").click()
-            expect(page.get_by_role("link", name="Connect Instagram")).to_be_visible()
-            page.get_by_role("button", name="Check connection").click()
             page.get_by_label("Caption", exact=True).fill("Fixture caption")
             page.get_by_role("button", name="Review post").click()
             expect(page.get_by_text("Fixture caption", exact=True)).to_be_visible()
             assert instagram_publish_attempts == []
-            page.get_by_role("button", name="Confirm and post to Instagram").click()
+            page.get_by_role("button", name="Confirm photo and caption").click()
+            expect(page.get_by_role("link", name="Connect Instagram")).to_have_attribute("href", "https://www.facebook.com/dialog/oauth")
+            assert len(instagram_publish_attempts) == 1 and b"Fixture caption" in instagram_publish_attempts[0]
             expect(page.get_by_text("Fixture post confirmed", exact=True)).to_be_visible()
             assert b"true" in instagram_publish_attempts[0]
         page.get_by_role("button", name="Sign out").click()
@@ -304,4 +314,21 @@ def test_cognito_password_reset_reports_invalid_and_expired_codes(frontend_url):
         submit.click()
         expect(page.get_by_role("status")).to_have_text("Password reset successfully. Please sign in.")
         assert targets == ["ForgotPassword", "ConfirmForgotPassword", "ConfirmForgotPassword", "ConfirmForgotPassword"]
+        browser.close()
+
+
+def test_meta_root_redirect_posts_the_callback_fields(frontend_url):
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(channel="chrome", args=["--disable-gpu"])
+        page = browser.new_page()
+
+        def callback(route):
+            assert route.request.method == "POST"
+            assert route.request.post_data == "state=fixture-state&code=fixture-code"
+            route.fulfill(body="Fixture callback received", content_type="text/plain")
+
+        page.route("**/api/v1/instagram/callback", callback)
+        page.goto(frontend_url + "/?state=fixture-state&code=fixture-code")
+        expect(page.get_by_text("Fixture callback received")).to_be_visible()
+        assert page.url == frontend_url + "/api/v1/instagram/callback"
         browser.close()

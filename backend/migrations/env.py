@@ -16,7 +16,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 url = _database_url()
-config.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False) if hasattr(url, "render_as_string") else url.replace("%", "%%"))
+rendered_url = url.render_as_string(hide_password=False) if hasattr(url, "render_as_string") else url
+config.set_main_option("sqlalchemy.url", rendered_url.replace("%", "%%"))
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:

@@ -3,6 +3,7 @@ from aws_cdk import (
     Stack,
     Duration,
     RemovalPolicy,
+    aws_applicationautoscaling as scaling,
     aws_ecr as ecr,
     aws_ecs as ecs,
     aws_iam as iam,
@@ -35,6 +36,11 @@ class ApplicationStack(Stack):
         https_proxy: str | None = None,
         cognito_user_pool: str | None = None,
         cognito_client_id: str | None = None,
+        watchmode_secret_arn: str | None = None,
+        instagram_secret_arn: str | None = None,
+        instagram_secret_json_key: str | None = None,
+        instagram_api_version: str | None = None,
+        instagram_image_origin: str | None = None,
         **kwargs,
     ):
         super().__init__(scope, construct_id, **kwargs)
@@ -147,6 +153,32 @@ class ApplicationStack(Stack):
                 NO_PROXY="localhost,127.0.0.1,169.254.170.2,169.254.170.23,169.254.169.254,.amazonaws.com",
             )
 
+        watchmode_secrets = []
+        if watchmode_secret_arn:
+            self.execution_role.add_to_policy(iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"], resources=[watchmode_secret_arn],
+            ))
+            watchmode_secrets.append(ecs.CfnTaskDefinition.SecretProperty(
+                name="WATCHMODE_API_KEY", value_from=watchmode_secret_arn,
+            ))
+
+        instagram_environment = {}
+        instagram_secrets = []
+        if instagram_secret_arn:
+            instagram_environment = {
+                "INSTAGRAM_API_VERSION": instagram_api_version,
+                "INSTAGRAM_IMAGE_ORIGIN": instagram_image_origin,
+            }
+            self.execution_role.add_to_policy(iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"], resources=[instagram_secret_arn],
+            ))
+            secret_reference = instagram_secret_arn
+            if instagram_secret_json_key:
+                secret_reference = f"{secret_reference}:{instagram_secret_json_key}::"
+            instagram_secrets.append(ecs.CfnTaskDefinition.SecretProperty(
+                name="INSTAGRAM_APP_SECRET", value_from=secret_reference,
+            ))
+
         cognito_environment = {}
         if cognito_user_pool and cognito_client_id:
             cognito_environment = {
@@ -162,7 +194,7 @@ class ApplicationStack(Stack):
             requires_compatibilities=["FARGATE"],
             network_mode="awsvpc",
             cpu="512",
-            memory="1024",
+            memory="2048",
             execution_role_arn=self.execution_role.role_arn,
             task_role_arn=self.task_role.role_arn,
             runtime_platform=ecs.CfnTaskDefinition.RuntimePlatformProperty(
@@ -188,7 +220,7 @@ class ApplicationStack(Stack):
                     ],
                     environment=[
                         *(ecs.CfnTaskDefinition.KeyValuePairProperty(name=name, value=value)
-                          for name, value in (google_environment | cognito_environment).items()),
+                          for name, value in (google_environment | cognito_environment | instagram_environment).items()),
                         ecs.CfnTaskDefinition.KeyValuePairProperty(
                             name="AUDIO_S3_BUCKET", value=audio_bucket.bucket_name,
                         ),
@@ -210,6 +242,8 @@ class ApplicationStack(Stack):
                     ],
                     secrets=[
                         *google_secrets,
+                        *instagram_secrets,
+                        *watchmode_secrets,
                         ecs.CfnTaskDefinition.SecretProperty(
                             name="DATABASE_CREDENTIALS",
                             value_from=(
@@ -337,6 +371,31 @@ class ApplicationStack(Stack):
         )
 
         self.service.add_dependency(self.http_listener)
+
+        if desired_count:
+            target = scaling.CfnScalableTarget(
+                self, "BackendScalingTarget",
+                service_namespace="ecs",
+                scalable_dimension="ecs:service:DesiredCount",
+                resource_id=f"service/{self.cluster.ref}/{self.service.attr_name}",
+                min_capacity=1,
+                max_capacity=3,
+                role_arn=f"arn:{self.partition}:iam::{self.account}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService",
+            )
+            scaling.CfnScalingPolicy(
+                self, "BackendMemoryScalingPolicy",
+                policy_name="apnasathi-memory-target",
+                policy_type="TargetTrackingScaling",
+                scaling_target_id=target.ref,
+                target_tracking_scaling_policy_configuration=scaling.CfnScalingPolicy.TargetTrackingScalingPolicyConfigurationProperty(
+                    predefined_metric_specification=scaling.CfnScalingPolicy.PredefinedMetricSpecificationProperty(
+                        predefined_metric_type="ECSServiceAverageMemoryUtilization",
+                    ),
+                    target_value=65,
+                    scale_out_cooldown=60,
+                    scale_in_cooldown=300,
+                ),
+            )
 
         # -------------------------------------------------
         # 12. Outputs

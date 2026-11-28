@@ -62,6 +62,8 @@ class AssistantChatResponse(BaseModel):
 
 
 def _shopping_in_chat(session: ShoppingSession) -> ShoppingSession:
+    if session.step == "item" and not session.store:
+        return replace(session, step="store")
     if session.step in {"login", "offer_login", "sign_in", "sign_in_self"}:
         return replace(session, step="item" if session.items else "items")
     if session.step in {"offer_checkout", "checkout_cart", "checkout_address", "checkout_payment", "payment_ready"}:
@@ -72,7 +74,9 @@ def _shopping_in_chat(session: ShoppingSession) -> ShoppingSession:
 def _shopping_chat_payload(session: ShoppingSession) -> dict:
     message = shopping_message(session)
     if session.step == "item":
-        message["response"] = f"Your list includes {session.items[session.item_index]}. Is that correct? Say “change items to…” to update the list."
+        message["response"] = f"Your list includes {session.items[session.item_index]}. Did the item link work and show what you wanted? Say “change items to…” to update the list."
+    elif session.step == "store":
+        message["response"] = "Which platform would you like to shop on? Choose Blinkit, Amazon, or Swiggy Instamart."
     elif session.step == "cart":
         message["response"] = "Is your shopping list complete?"
     elif session.step == "done":
@@ -181,7 +185,16 @@ def assistant_chat(
             session = replace(session, step="items", item_index=0)
         session = _shopping_in_chat(shopping_reply(session, correction.group(1) if correction else question))
         shopping = _shopping_chat_payload(session)
-        if session.store == "Blinkit" and session.items != tuple(prior_shopping["session"]["items"]):
+        if session.step == "item" and question.strip(" .!?,").casefold() in {"no", "nope", "nahi", "नहीं"}:
+            shopping["response"] = (
+                f"Try reopening the {session.store} link for {session.items[session.item_index]}. "
+                "If it opens but the results differ, try a shorter search on the retailer. "
+                "Did it work now? Say “change items to…” if you want different links."
+            )
+        if session.store == "Blinkit" and session.items and (
+            session.store != prior_shopping["session"].get("store")
+            or session.items != tuple(prior_shopping["session"]["items"])
+        ):
             user_message.metadata_json = {"shopping_items": list(session.items), "shopping_store": session.store}
         response_text = shopping["response"]
         requires_confirmation = not shopping["done"]
@@ -242,7 +255,7 @@ def assistant_chat(
             raise HTTPException(status_code=502, detail="The AI returned no structured response.")
         intent = classified.intent
         if intent == "ORDER_GROCERIES":
-            raw_items = classified.entities.get("items")
+            raw_items = classified.shopping_items or classified.entities.get("items")
             items = tuple(item for item in raw_items if isinstance(item, str) and item.strip()) if isinstance(raw_items, list) else ()
             session = _shopping_in_chat(start_shopping(f"{classified.application or ''} {question}", items))
             shopping = _shopping_chat_payload(session)
@@ -259,7 +272,7 @@ def assistant_chat(
             action = intent_action(classified)
             response_text = action.get("response") or classified.response
             if intent == "WATCH_SHOW" and action.get("playback_url"):
-                playback = {"url": action["playback_url"], "platform": action["playback_platform"]}
+                playback = {"url": action["playback_url"], "platform": action["playback_platform"], "kind": action["playback_status"]}
             requires_confirmation = bool(action.get("requires_confirmation", classified.requires_confirmation))
 
         # Cache only high-confidence, stable informational answers for this user.

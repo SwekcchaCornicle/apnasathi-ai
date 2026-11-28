@@ -54,6 +54,26 @@
           "iam:PassedToService": "ecs-tasks.amazonaws.com"
         }
       }
+    },
+    {
+      "Sid": "ListApnaSathiHostedAssets",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": "arn:aws:s3:::apnasathi-dev-gateway-site-de8owegqprxa",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": "assets/*"
+        }
+      }
+    },
+    {
+      "Sid": "PublishApnaSathiHostedAssets",
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": [
+        "arn:aws:s3:::apnasathi-dev-gateway-site-de8owegqprxa/assets/*",
+        "arn:aws:s3:::apnasathi-dev-gateway-site-de8owegqprxa/index.html"
+      ]
     }
   ]
 }

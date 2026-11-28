@@ -37,21 +37,35 @@ jobs:
           unset-current-credentials: true
 
       - name: Download and validate the service task definition
-        id: current
         run: |
           set -euo pipefail
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           [[ "$ACCOUNT" == "$CDK_DEFAULT_ACCOUNT" ]] || { echo "::error::Unexpected AWS account."; exit 1; }
           SERVICE=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0]' --output json)
           CURRENT_TASK=$(jq -er '.taskDefinition' <<< "$SERVICE")
-          DESIRED=$(jq -er '[.desiredCount, 1] | max' <<< "$SERVICE")
-          echo "desired=$DESIRED" >> "$GITHUB_OUTPUT"
           aws ecs describe-task-definition --task-definition "$CURRENT_TASK" --query taskDefinition --output json > task-definition.json
           jq -e '
             .family == "apnasathi-backend" and .runtimePlatform.cpuArchitecture == "ARM64"
             and ([.containerDefinitions[] | select(.name == "backend")] | length == 1)
-            and ([.containerDefinitions[] | select(.name == "backend") | .secrets[]? | select(.name == "GOOGLE_WIF_CONFIG_JSON")] | length == 1)
+            and (.containerDefinitions[] | select(.name == "backend") |
+                 ([.secrets[]?.name] | contains(["GOOGLE_WIF_CONFIG_JSON", "WATCHMODE_API_KEY", "INSTAGRAM_APP_SECRET"]))
+                 and ([.environment[]?.name] | contains(["INSTAGRAM_API_VERSION", "INSTAGRAM_IMAGE_ORIGIN"])))
           ' task-definition.json > /dev/null
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build the hosted frontend
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: /api/v1
+          VITE_COGNITO_REGION: ${{ env.AWS_REGION }}
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID || 'ap-south-1_qxfax5y4B' }}
+          VITE_COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID || '6ltn4ni5clgd6b939epjcv78bh' }}
+        run: |
+          npm ci
+          npm run build
 
       - uses: docker/setup-qemu-action@v3
 
@@ -87,7 +101,6 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
-          DESIRED_COUNT: ${{ steps.current.outputs.desired }}
           COGNITO_USER_POOL_ID: ${{ vars.COGNITO_USER_POOL_ID || 'ap-south-1_qxfax5y4B' }}
           COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID || '6ltn4ni5clgd6b939epjcv78bh' }}
         run: |
@@ -112,10 +125,26 @@ jobs:
             | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
           ' task-definition.json > new-task-definition.json
           TASK_ARN=$(aws ecs register-task-definition --cli-input-json file://new-task-definition.json --query 'taskDefinition.taskDefinitionArn' --output text)
-          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$TASK_ARN" --desired-count "$DESIRED_COUNT" >/dev/null
+          aws ecs update-service --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" --task-definition "$TASK_ARN" >/dev/null
           aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
           ACTUAL=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE" --query 'services[0].taskDefinition' --output text)
           if [[ "$ACTUAL" != "$TASK_ARN" ]]; then
             echo "::error::ECS stabilized on a different task definition, possibly after rollback."
             exit 1
           fi
+
+      - name: Publish the frontend to the site bucket
+        env:
+          SITE_BUCKET: ${{ vars.FRONTEND_SITE_BUCKET || 'apnasathi-dev-gateway-site-de8owegqprxa' }}
+        run: |
+          set -euo pipefail
+          aws s3 sync frontend/dist/assets/ "s3://$SITE_BUCKET/assets/" --cache-control 'public,max-age=31536000,immutable'
+          aws s3 cp frontend/dist/index.html "s3://$SITE_BUCKET/index.html" --content-type text/html --cache-control no-cache
+
+      - name: Check the development HTTPS gateway
+        run: |
+          curl --fail --silent --show-error --retry 3 --max-time 15 \
+            https://d03k1owznd.execute-api.ap-south-1.amazonaws.com/api/v1/health
+          curl --fail --silent --show-error --retry 3 --max-time 15 \
+            https://d03k1owznd.execute-api.ap-south-1.amazonaws.com/ -o hosted-index.html
+          cmp frontend/dist/index.html hosted-index.html

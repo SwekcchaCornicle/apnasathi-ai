@@ -12,8 +12,8 @@ def intent_clasify_prompt(transcription, user_context=None, preferred_language="
         Understand the user's complete request.
         Supported intents: GREETING, OPEN_APP, POST_PHOTO, WATCH_SHOW,
         ORDER_GROCERIES, GENERAL_QUESTION, GENERAL_CONVERSATION, UNKNOWN.
-        Use ORDER_GROCERIES for requests to buy, shop, or order items.
-        A request to open Blinkit, Amazon, or Swiggy Instamart also starts shopping.
+        Use ORDER_GROCERIES for requests to buy, shop, or order items. Put explicitly requested items with their quantities in shopping_items.
+        A request to open Blinkit, Amazon, or Swiggy Instamart also starts shopping. Leave application unset unless the user names a retailer.
         For WATCH_SHOW, populate show_name with the title, excluding any platform name.
         Identify intent, application, entities and whether confirmation is required.
         User transcription: {transcription}

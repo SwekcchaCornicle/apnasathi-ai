@@ -35,7 +35,7 @@ def test_isolated_accounts_chat_voice_history_and_real_vector_cache():
     shopping = IntentSchema(
         intent="ORDER_GROCERIES", response="Review your basket.",
         response_language="en", confidence=0.99, requires_confirmation=True,
-        entities={"items": ["2 apples", "1 litre milk"]},
+        shopping_items=["2 apples", "1 litre milk"],
     )
 
     with (
@@ -126,3 +126,63 @@ def test_isolated_accounts_chat_voice_history_and_real_vector_cache():
         assert "2 apples" not in other_reply.json()["response"]
         assert other_reply.json()["source"] == "saved_history"
         assert client.get(f"/api/v1/conversations/{next_cid}/messages", headers=b).status_code == 404
+
+
+def test_instagram_draft_is_shared_and_callback_claims_it_once():
+    from unittest.mock import Mock
+
+    from agents import social_media
+    from database.models import User
+
+    database = urlsplit(os.environ["DATABASE_URL"])
+    assert database.hostname in {"localhost", "127.0.0.1"}
+    assert (database.port, database.path) in {(55432, "/apnasathi_qa"), (55433, "/postgres")}
+    subject = f"instagram-integration-{uuid4().hex}"
+    email = f"{subject}@example.test"
+    with get_session_factory()() as db:
+        user = User(auth_provider="cognito", auth_subject=subject, email=email)
+        db.add(user)
+        db.commit()
+
+    jpeg = bytes.fromhex("ffd8ff00ffd9")
+    agent = Mock()
+    oauth_state = uuid4().hex
+    agent.begin_authorization.return_value = ("https://www.facebook.com/dialog/oauth", oauth_state)
+    agent.publish_photo.return_value = "fixture-media-id"
+
+    try:
+        with (
+            patch.dict(app.dependency_overrides, {dependencies.get_current_user: lambda: user}),
+            patch.object(social_media, "_configured_agent", return_value=(agent, "https://local.test")),
+            TestClient(app, base_url="https://local.test") as chat_client,
+            TestClient(app, base_url="https://local.test") as callback_client,
+            TestClient(app, base_url="https://local.test") as image_client,
+        ):
+            def load_image(credentials, image_url, caption):
+                assert caption == "A confirmed caption"
+                image = image_client.get(urlsplit(image_url).path)
+                assert image.status_code == 200
+                assert image.content == jpeg
+                return "fixture-container"
+
+            agent.create_photo.side_effect = load_image
+            draft = chat_client.post(
+                "/api/v1/instagram/photo",
+                files={"image": ("fixture.jpg", jpeg, "image/jpeg")},
+                data={"caption": "A confirmed caption", "confirmed": "true"},
+            )
+            assert draft.status_code == 200, draft.text
+            callback = {"state": oauth_state, "code": "fixture-code"}
+            callback_route = "/api/v1/instagram/callback"
+            assert callback_client.post(callback_route, data=callback).status_code == 400
+            callback_client.cookies.update(chat_client.cookies)
+            assert callback_client.post(callback_route, data=callback).status_code == 200
+            assert callback_client.post(callback_route, data=callback).status_code == 400
+            assert chat_client.get("/api/v1/instagram/status").json()["media_id"] == "fixture-media-id"
+            agent.publish_photo.assert_called_once_with(agent.exchange_code.return_value, "fixture-container")
+            image_path = urlsplit(agent.create_photo.call_args.args[1]).path
+            assert image_client.get(image_path).status_code == 404
+    finally:
+        with get_session_factory()() as db:
+            db.delete(db.get(User, user.id))
+            db.commit()

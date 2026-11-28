@@ -20,8 +20,8 @@ env = cdk.Environment(
 
 # Keep infrastructure-only development synths safe until an image has been published.
 desired_count = str(app.node.try_get_context("backendDesiredCount") or "0")
-if not re.fullmatch(r"[0-9]+", desired_count):
-    raise ValueError("backendDesiredCount must be a non-negative integer.")
+if desired_count not in {"0", "1", "2", "3"}:
+    raise ValueError("backendDesiredCount must be between 0 and 3.")
 image_tag = app.node.try_get_context("backendImageTag")
 if image_tag is None:
     if int(desired_count) > 0:
@@ -64,6 +64,33 @@ if wif_secret_arn and not re.fullmatch(
     wif_secret_arn,
 ):
     raise ValueError("googleWifSecretArn must be a complete Secrets Manager ARN in this AWS account and region.")
+
+watchmode_secret_arn = app.node.try_get_context("watchmodeSecretArn")
+if watchmode_secret_arn and not re.fullmatch(
+    rf"arn:aws:secretsmanager:ap-south-1:{env.account or '[0-9]{{12}}'}:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{{6}}",
+    watchmode_secret_arn,
+):
+    raise ValueError("watchmodeSecretArn must be a complete Secrets Manager ARN.")
+
+instagram_secret_arn = app.node.try_get_context("instagramSecretArn")
+instagram_secret_json_key = app.node.try_get_context("instagramSecretJsonKey")
+if instagram_secret_json_key and (
+    not instagram_secret_arn or not re.fullmatch(r"[A-Za-z0-9 _.-]+", instagram_secret_json_key)
+):
+    raise ValueError("Set a valid JSON key alongside the Instagram secret ARN.")
+instagram_api_version = app.node.try_get_context("instagramApiVersion")
+instagram_image_origin = app.node.try_get_context("instagramImageOrigin")
+instagram_config = (instagram_secret_arn, instagram_api_version, instagram_image_origin)
+if any(instagram_config) and (
+    not all(instagram_config)
+    or not re.fullmatch(r"v[0-9]+\.[0-9]+", instagram_api_version)
+    or not re.fullmatch(r"https://[A-Za-z0-9.-]+", instagram_image_origin)
+    or not re.fullmatch(
+        rf"arn:aws:secretsmanager:ap-south-1:{env.account or '[0-9]{{12}}'}:secret:[A-Za-z0-9/_+=.@-]+-[A-Za-z0-9]{{6}}",
+        instagram_secret_arn,
+    )
+):
+    raise ValueError("Set a complete Instagram secret ARN, Meta API version, and public HTTPS image origin.")
 
 network_stack = NetworkStack(
     app,
@@ -119,6 +146,11 @@ application_stack = ApplicationStack(
     https_proxy=proxy_url,
     cognito_user_pool=cognito_user_pool,
     cognito_client_id=cognito_client_id,
+    watchmode_secret_arn=watchmode_secret_arn,
+    instagram_secret_arn=instagram_secret_arn,
+    instagram_secret_json_key=instagram_secret_json_key,
+    instagram_api_version=instagram_api_version,
+    instagram_image_origin=instagram_image_origin,
     env=env,
 )
 

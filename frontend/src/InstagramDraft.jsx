@@ -27,28 +27,46 @@ export default function InstagramDraft({ request, onCancel }) {
   async function attach() {
     const body = new FormData()
     body.append('image', photo)
+    body.append('caption', caption)
+    body.append('confirmed', 'true')
     const draft = await request('/instagram/photo', { method: 'POST', body, credentials: 'include' })
     setAuthorizationUrl(draft.action.url)
     setStep('authorization')
   }
 
-  async function checkAuthorization() {
-    const draft = await request('/instagram/status', { credentials: 'include' })
-    if (draft.step !== 'caption') throw new Error(draft.step === 'failed' ? 'Instagram authorization failed.' : 'Complete Instagram authorization before continuing.')
-    setStep('caption')
-  }
-
-  async function publish() {
-    const body = new FormData()
-    body.append('caption', caption)
-    body.append('confirmed', 'true')
-    const result = await request('/instagram/publish', { method: 'POST', body, credentials: 'include' })
-    setNotice(result.response)
-    setStep('published')
-  }
+  useEffect(() => {
+    if (step !== 'authorization') return
+    let active = true
+    let timer
+    async function check() {
+      try {
+        const draft = await request('/instagram/status', { credentials: 'include' })
+        if (!active) return
+        if (['published', 'failed', 'uncertain'].includes(draft.step)) {
+          setStep(draft.step)
+          setNotice(draft.response)
+          return
+        }
+        if (draft.step === 'publishing') setNotice('Instagram is processing your post.')
+      } catch (error) {
+        if (!active) return
+        setNotice(error.message)
+        if ([401, 404].includes(error.status)) {
+          setStep('failed')
+          return
+        }
+      }
+      if (active) timer = window.setTimeout(check, 2500)
+    }
+    timer = window.setTimeout(check, 2500)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [request, step])
 
   async function cancel() {
-    if (authorizationUrl && step !== 'published') {
+    if (step === 'authorization') {
       await request('/instagram/draft', { method: 'DELETE', credentials: 'include' })
     }
     onCancel()
@@ -59,11 +77,11 @@ export default function InstagramDraft({ request, onCancel }) {
       {photo && preview && <img src={preview} alt="Instagram photo preview" width="128" />}
       {step === 'image' && <>
         <label>Choose a JPEG <input type="file" accept="image/jpeg" disabled={busy} onChange={(event) => setPhoto(event.target.files?.[0] || null)} /></label>
-        <button type="button" disabled={busy || !photo} onClick={() => void run(attach)}>Attach photo</button>
+        <button type="button" disabled={busy || !photo} onClick={() => setStep('caption')}>Attach photo</button>
       </>}
       {step === 'authorization' && <>
         <a className="voice-link" href={authorizationUrl} target="_blank" rel="noopener noreferrer">Connect Instagram</a>
-        <button type="button" disabled={busy} onClick={() => void run(checkAuthorization)}>Check connection</button>
+        <p>Authorize the account you want to use. Your confirmed photo will be posted after authorization.</p>
       </>}
       {step === 'caption' && <>
         <label>Caption <textarea value={caption} maxLength={2200} rows={3} onChange={(event) => setCaption(event.target.value)} /></label>
@@ -82,9 +100,9 @@ export default function InstagramDraft({ request, onCancel }) {
       {step === 'review' && <>
         <p>{caption || 'No caption'}</p>
         <button type="button" onClick={() => setStep('caption')} disabled={busy}>Edit caption</button>
-        <button type="button" onClick={() => void run(publish)} disabled={busy}>Confirm and post to Instagram</button>
+        <button type="button" onClick={() => void run(attach)} disabled={busy}>Confirm photo and caption</button>
       </>}
-      <button type="button" disabled={busy} onClick={() => void run(cancel)}>{step === 'published' ? 'Close draft' : 'Cancel draft'}</button>
+      <button type="button" disabled={busy} onClick={() => void run(cancel)}>{['published', 'failed', 'uncertain'].includes(step) ? 'Close draft' : 'Cancel draft'}</button>
       {notice && <p role="status">{notice}</p>}
     </section>
   )

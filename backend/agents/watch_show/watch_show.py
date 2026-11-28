@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 from ipaddress import ip_address
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import requests
 from dotenv import dotenv_values
@@ -11,6 +11,11 @@ from agents.speech import generate_voice
 
 logger = logging.getLogger(__name__)
 BASE_URL = "https://api.watchmode.com/v1"
+PROVIDER_SEARCH = {
+    "primevideo": ("Prime Video", "https://www.primevideo.com/search", "phrase"),
+    "netflix": ("Netflix", "https://www.netflix.com/search", "q"),
+    "youtube": ("YouTube", "https://www.youtube.com/results", "search_query"),
+}
 
 
 def clean_streaming_platforms(
@@ -142,9 +147,20 @@ def watch_show(show_name, language, requested_platform=None):
             status = "failed"
             logger.warning("Could not look up a streaming link.")
 
+        if not playback_url and requested_platform:
+            search = PROVIDER_SEARCH.get(provider_key(requested_platform))
+            if search:
+                playback_platform, base, parameter = search
+                playback_url = f"{base}?{urlencode({parameter: show_name.strip()})}"
+                status = "search"
+
     label = playback_platform or requested_platform
     messages = {
         "ready": (f"The video is ready to open on {label}.", f"वीडियो {label} पर खोलने के लिए तैयार है।"),
+        "search": (
+            f"I couldn't verify a direct playback link. You can search for the title on {label}.",
+            f"सीधा वीडियो लिंक नहीं मिला। आप {label} पर शीर्षक खोज सकते हैं।",
+        ),
         "failed": ("I couldn't look up this video.", "इस वीडियो का लिंक खोजा नहीं जा सका।"),
         "source_unavailable": (
             f"I couldn't find a watch link on {label}." if label else "I couldn't find a watch link for this title.",

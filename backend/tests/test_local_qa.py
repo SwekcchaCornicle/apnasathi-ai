@@ -93,38 +93,42 @@ def test_missing_auth_is_rejected_before_database_configuration():
 
 
 def test_instagram_draft_is_private_and_publish_requires_confirmation():
+    from unittest.mock import Mock
     from uuid import uuid4
     from agents import social_media
     from auth.dependencies import get_current_user
 
     owner = SimpleNamespace(id=uuid4())
-    second_user = SimpleNamespace(id=uuid4())
-    signed_in = owner
+    db = Mock()
+    posted = {"id": "fixture-draft", "image_key": "fixture-image", "caption": "review"}
+    db.execute.return_value.mappings.return_value.one_or_none.side_effect = [None, posted, None]
     with (
-        patch.dict(app.dependency_overrides, {get_current_user: lambda: signed_in}),
+        patch.dict(app.dependency_overrides, {get_current_user: lambda: owner, get_db: lambda: db}),
         patch.object(social_media, "_configured_agent") as configured,
-        patch.object(social_media, "_drafts", {}),
         TestClient(app, base_url="https://local.test") as client,
     ):
-        agent = configured.return_value
-        agent.begin_authorization.return_value = ("https://www.instagram.com/oauth/authorize", "fixture-state")
-        agent.redirect_uri = "https://local.test/api/v1/instagram/callback"
-        agent.exchange_code.return_value = SimpleNamespace()
+        agent = Mock()
+        configured.return_value = (agent, "https://local.test")
+        agent.begin_authorization.return_value = ("https://www.facebook.com/dialog/oauth", "fixture-state")
         agent.create_photo.return_value = "fixture-container"
         agent.publish_photo.return_value = "fixture-media"
-        photo = client.post("/api/v1/instagram/photo", files={"image": ("fixture.jpg", b"\xff\xd8\xfffixture\xff\xd9", "image/jpeg")})
+        files = {"image": ("fixture.jpg", bytes.fromhex("ffd8ff00ffd9"), "image/jpeg")}
+        callback = {"state": "fixture-state", "code": "fixture-code"}
+        assert client.post("/api/v1/instagram/callback", data=callback).status_code == 400
+        assert client.post("/api/v1/instagram/photo", files=files).status_code == 422
+        db.execute.assert_not_called()
+        photo = client.post("/api/v1/instagram/photo", files=files, data={"caption": "review", "confirmed": "true"})
         assert photo.status_code == 200
-        signed_in = second_user
+        assert "HttpOnly" in photo.headers["set-cookie"]
         assert client.get("/api/v1/instagram/status").status_code == 404
-        assert client.delete("/api/v1/instagram/draft").status_code == 404
-        signed_in = owner
-        assert client.get("/api/v1/instagram/callback", params={"state": "fixture-state", "code": "fixture-code"}).status_code == 200
-        assert client.post("/api/v1/instagram/publish", data={"caption": "review"}).status_code == 422
         agent.publish_photo.assert_not_called()
-        posted = client.post("/api/v1/instagram/publish", data={"caption": "review", "confirmed": "true"})
-        assert posted.json()["media_id"] == "fixture-media"
-        agent.publish_photo.assert_called_once()
-        assert client.delete("/api/v1/instagram/draft").status_code == 204
+        result = client.post("/api/v1/instagram/callback", data=callback)
+        assert result.status_code == 200
+        assert "was posted" in result.text
+        assert client.post("/api/v1/instagram/callback", data=callback).status_code == 400
+        agent.exchange_code.assert_called_once_with("fixture-code")
+        agent.create_photo.assert_called_once_with(agent.exchange_code.return_value, "https://local.test/api/v1/instagram/image/fixture-image", "review")
+        agent.publish_photo.assert_called_once_with(agent.exchange_code.return_value, "fixture-container")
 
 
 def test_video_troubleshooting_accepts_text_and_keeps_selected_language():
@@ -153,3 +157,16 @@ def test_trace_header_matches_safe_cloudwatch_stages(caplog):
     assert f"request_id={identifier} stage=request.start" in caplog.text
     assert f"request_id={identifier} stage=request.complete" in caplog.text
     assert fixture not in caplog.text
+
+
+def test_video_uses_provider_search_when_direct_lookup_is_unavailable():
+    from agents.watch_show.watch_show import watch_show
+
+    with (
+        patch("agents.watch_show.watch_show.get_streaming_platforms", side_effect=RuntimeError),
+        patch("agents.watch_show.watch_show.generate_voice", return_value={}),
+    ):
+        result = watch_show("Panchayat", "en", "Amazon Prime Video")
+    assert result["playback_status"] == "search"
+    assert result["playback_platform"] == "Prime Video"
+    assert result["playback_url"] == "https://www.primevideo.com/search?phrase=Panchayat"

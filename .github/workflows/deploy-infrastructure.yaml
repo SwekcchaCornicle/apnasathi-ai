@@ -53,6 +53,11 @@ jobs:
           COGNITO_CLIENT_ID: ${{ vars.COGNITO_CLIENT_ID }}
           NETWORK_EGRESS: ${{ vars.NETWORK_EGRESS }}
           HTTPS_PROXY_URL: ${{ vars.BACKEND_HTTPS_PROXY }}
+          WATCHMODE_SECRET_ARN: ${{ vars.WATCHMODE_SECRET_ARN }}
+          INSTAGRAM_SECRET_JSON_KEY: ${{ vars.INSTAGRAM_SECRET_JSON_KEY }}
+          INSTAGRAM_SECRET_ARN: ${{ vars.INSTAGRAM_SECRET_ARN }}
+          INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION }}
+          INSTAGRAM_IMAGE_ORIGIN: ${{ vars.INSTAGRAM_IMAGE_ORIGIN }}
           BASELINE_IMAGE_TAG: ${{ vars.BACKEND_IMAGE_TAG }}
           BASELINE_DESIRED_COUNT: ${{ vars.BACKEND_DESIRED_COUNT }}
         run: |
@@ -78,6 +83,11 @@ jobs:
           if [[ -n "$HTTPS_PROXY_URL" ]]; then context+=(-c "backendHttpsProxy=$HTTPS_PROXY_URL"); fi
           if [[ -n "$BASELINE_IMAGE_TAG" ]]; then context+=(-c "backendImageTag=$BASELINE_IMAGE_TAG"); fi
           if [[ -n "$BASELINE_DESIRED_COUNT" ]]; then context+=(-c "backendDesiredCount=$BASELINE_DESIRED_COUNT"); fi
+          if [[ -n "$WATCHMODE_SECRET_ARN" ]]; then context+=(-c "watchmodeSecretArn=$WATCHMODE_SECRET_ARN"); fi
+          if [[ -n "$INSTAGRAM_SECRET_ARN$INSTAGRAM_API_VERSION$INSTAGRAM_IMAGE_ORIGIN" ]]; then
+            context+=(-c "instagramSecretArn=$INSTAGRAM_SECRET_ARN" -c "instagramApiVersion=$INSTAGRAM_API_VERSION" -c "instagramImageOrigin=$INSTAGRAM_IMAGE_ORIGIN")
+          fi
+          if [[ -n "$INSTAGRAM_SECRET_JSON_KEY" ]]; then context+=(-c "instagramSecretJsonKey=$INSTAGRAM_SECRET_JSON_KEY"); fi
           npx --yes aws-cdk@2.1149.0 synth --no-lookups --quiet "${context[@]}"
           npx --yes aws-cdk@2.1149.0 deploy --all --require-approval never "${context[@]}"
 

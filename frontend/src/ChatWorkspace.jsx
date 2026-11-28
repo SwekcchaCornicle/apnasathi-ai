@@ -49,6 +49,37 @@ function speakReply(text, language) {
   window.speechSynthesis.speak(utterance)
 }
 
+function openLoadingVideoTab() {
+  const tab = window.open('about:blank', '_blank')
+  if (!tab) return null
+  tab.opener = null
+  tab.document.title = 'Opening your video'
+  const body = tab.document.body
+  body.style.cssText = 'margin:0;min-height:100vh;display:grid;place-items:center;background:#000;color:white'
+  const spinner = tab.document.createElement('div')
+  spinner.setAttribute('role', 'status')
+  spinner.setAttribute('aria-label', 'Opening your video')
+  spinner.style.cssText = 'width:44px;height:44px;border:4px solid #555;border-top-color:white;border-radius:50%'
+  body.append(spinner)
+  spinner.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], { duration: 800, iterations: Infinity })
+  return tab
+}
+
+function openVideoResult(result, tab) {
+  try {
+    if (result.intent !== 'WATCH_SHOW' || !result.playback?.url) return false
+    const url = new URL(result.playback.url)
+    if (url.protocol !== 'https:' || url.username || url.password) return false
+    const target = tab && !tab.closed ? tab : openLoadingVideoTab()
+    if (!target) return false
+    target.opener = null
+    target.location.replace(url.href)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export default function ChatWorkspace({ onSignOut, token, language }) {
   const [conversations, setConversations] = useState([])
   const [messageList, setMessageList] = useState([])
@@ -158,6 +189,9 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
   async function sendText(text = draft) {
     const content = text.trim()
     if (!content || !activeId || busy || recording || requestingMic) return
+    const wantsVideo = /\bwatch\b|\b(?:play|find|search for|open)\b.*\b(?:video|series|movie|show|episode|netflix|prime|youtube)\b|(?:वीडियो|फ़िल्म|सीरीज़).*(?:देख|चल|खोल)/i.test(content)
+    const tab = wantsVideo ? openLoadingVideoTab() : null
+    let videoOpened = false
     setDraft('')
     setNotice('')
     setMessageList((current) => [...current, { id: `pending-${Date.now()}`, role: 'user', content, language }])
@@ -171,12 +205,15 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
         { id: result.user_message_id, role: 'user', content, language: result.language },
         { id: result.assistant_message_id, role: 'assistant', content: result.response, language: result.language, intent: result.intent, source: result.source, shopping: result.shopping, playback: result.playback },
       ])
+      videoOpened = openVideoResult(result, tab)
+      if (result.playback && !videoOpened) setNotice('Use the video link if your browser blocked the new tab.')
       void refreshConversations().catch(() => {})
     } catch (error) {
       setMessageList((current) => current.filter((item) => !String(item.id).startsWith('pending-')))
       setDraft(content)
       setNotice(error.message)
     } finally {
+      if (tab && !videoOpened) tab.close()
       setBusy(false)
     }
   }
@@ -247,6 +284,7 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
           ])
           if (!mountedRef.current) return
           speakReply(result.response, result.language || language)
+          if (result.playback && !openVideoResult(result)) setNotice('Use the video link if your browser blocked the new tab.')
           void refreshConversations().catch(() => {})
         } catch (error) { setNotice(error.message) }
         finally {
@@ -321,8 +359,11 @@ export default function ChatWorkspace({ onSignOut, token, language }) {
                   <p>{message.content}</p>
                   {message.playback && (
                     <div className="suggestion-row">
-                      <a className="voice-link" href={message.playback.url} target="_blank" rel="noopener noreferrer">Open in {message.playback.platform}</a>
-                      {message.id === messageList.at(-1)?.id && <button type="button" disabled={busy || recording} onClick={() => void guideVideo(message.playback.platform, 'playing')}>Troubleshoot playback</button>}
+                      <a className="voice-link" href={message.playback.url} target="_blank" rel="noopener noreferrer">{message.playback.kind === 'search' ? 'Search' : 'Open in'} {message.playback.platform}</a>
+                      {message.id === messageList.at(-1)?.id && !videoGuide && <>
+                        <span>{language === 'hi' ? 'क्या वीडियो चल रहा है?' : 'Is the video playing?'}</span>
+                        {['Yes', 'No'].map((reply) => <button key={reply} type="button" disabled={busy || recording} onClick={() => void guideVideo(message.playback.platform, 'playing', reply)}>{reply}</button>)}
+                      </>}
                     </div>
                   )}
                   {message.intent === 'POST_PHOTO' && message.id === messageList.at(-1)?.id && dismissedDraft !== message.id && (

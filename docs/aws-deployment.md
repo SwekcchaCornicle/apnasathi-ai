@@ -179,3 +179,39 @@ Serve the built assets over HTTPS. On the same hostname, route `/api/v1/*` to th
 Set the GitHub environment variables `COGNITO_USER_POOL_ID` and `COGNITO_CLIENT_ID` to the same public identifiers used in the frontend. The infrastructure workflow forwards them into the ECS container. The public client needs SRP and permission to write the `name` attribute at signup. The running task needs network access to the Cognito JWKS endpoint.
 
 Before enabling browser traffic, run `python -m alembic -c backend/alembic.ini upgrade head` from the repository root in a controlled migration runner with the intended RDS connection, private-subnet connectivity and permission to create the vector extension. Then verify HTTPS health, signup and email confirmation, sign-in, profile creation, and chat persistence with a development account.
+
+## Transaction deployment and ECS scaling
+
+With a nonzero backend baseline, CDK configures ECS target tracking at 65%
+average memory utilization, with 1–3 Fargate tasks. Scale-out and scale-in
+cooldowns are 60 and 300 seconds. The application workflow updates the task
+definition without resetting the live desired count. Check the CloudFormation
+change set before adopting the existing development scaling resources.
+
+The application workflow defaults to the development site's S3 origin bucket.
+Apply the site bucket permissions in `github-deploy-permissions.json` to the
+deployment role. Set `FRONTEND_SITE_BUCKET` only if the gateway origin changes. The workflow publishes hashed assets before switching the
+entry page. The hosted frontend and API must share the gateway origin.
+
+Set `WATCHMODE_SECRET_ARN` to a Secrets Manager secret containing the raw
+Watchmode key to enable direct streaming-title lookup. Provider search links
+remain available when Watchmode yields no playable title link.
+
+Apply Alembic revision `0002_instagram_drafts` in the migration runner before
+enabling Instagram. Store Meta app 1176321671633524's secret as a raw string in
+AWS Secrets Manager. Configure `INSTAGRAM_SECRET_ARN`, `INSTAGRAM_API_VERSION`,
+and `INSTAGRAM_IMAGE_ORIGIN` in the infrastructure workflow. For a JSON secret,
+set `INSTAGRAM_SECRET_JSON_KEY` to the exact field name, such as `App secret`. The development
+image origin is `https://d03k1owznd.execute-api.ap-south-1.amazonaws.com`.
+Meta config 1439662974983454 must allow the exact root redirect with the
+trailing slash and grant the Facebook Page and Instagram publishing permissions
+for a linked professional Instagram account. The root page relays the callback
+to `/api/v1/instagram/callback`. Use a single linked test account to verify
+photo publication and confirm the result in the Instagram profile.
+
+Validate development scaling by recording the starting bounds, temporarily
+setting the minimum to two, observing two running tasks and checking the HTTPS
+health route, then restoring the starting minimum. This exercises AWS-driven
+task addition. To validate the 65% metric trigger as well, use a representative
+development workload while observing CloudWatch memory and Application Auto
+Scaling activities.

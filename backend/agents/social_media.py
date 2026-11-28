@@ -5,14 +5,15 @@ Store OAuth state with the signed-in user's draft and consume it once at callbac
 """
 
 from dataclasses import dataclass, field
-from hmac import compare_digest
 from secrets import token_urlsafe
 from urllib.parse import urlencode, urlsplit
 
 import requests
 
-GRAPH = "https://graph.instagram.com"
-SCOPES = "instagram_business_basic,instagram_business_content_publish"
+GRAPH = "https://graph.facebook.com"
+META_APP_ID = "1176321671633524"
+META_CONFIG_ID = "1439662974983454"
+META_CALLBACK = "https://d03k1owznd.execute-api.ap-south-1.amazonaws.com/"
 
 
 class InstagramError(RuntimeError):
@@ -23,7 +24,6 @@ class InstagramError(RuntimeError):
 class InstagramCredentials:
     user_id: str
     access_token: str = field(repr=False)
-    expires_in: int
 
 
 def _request(operation, method, url, **kwargs):
@@ -50,53 +50,41 @@ class InstagramAgent:
         state = token_urlsafe(32)
         query = urlencode({
             "client_id": self.app_id,
+            "config_id": META_CONFIG_ID,
+            "display": "popup",
+            "override_default_response_type": "true",
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
-            "scope": SCOPES,
             "state": state,
+            "prompt": "login",
         })
-        return f"https://www.instagram.com/oauth/authorize?{query}", state
+        return f"https://www.facebook.com/dialog/oauth?{query}", state
 
-    def exchange_code(self, code: str, state: str, expected_state: str) -> InstagramCredentials:
-        if not code or not state or not expected_state or not compare_digest(
-            state.encode(), expected_state.encode()
-        ):
-            raise InstagramError("Instagram authorization could not be verified.")
-        short = _request(
-            "code exchange", "POST", "https://api.instagram.com/oauth/access_token",
-            data={
-                "client_id": self.app_id, "client_secret": self.app_secret,
-                "grant_type": "authorization_code", "redirect_uri": self.redirect_uri,
-                "code": code,
-            },
-        )
-        entries = short.get("data")
-        if isinstance(entries, list) and len(entries) == 1 and isinstance(entries[0], dict):
-            short = entries[0]
-        if not short.get("user_id") or not short.get("access_token"):
-            raise InstagramError("Instagram did not return the authorized account.")
-        long = _request(
-            "long-lived token exchange", "GET", f"{GRAPH}/access_token",
+    def exchange_code(self, code: str) -> InstagramCredentials:
+        if not code:
+            raise InstagramError("Instagram authorization was cancelled.")
+        token = _request(
+            "code exchange", "GET", f"{GRAPH}/{self.api_version}/oauth/access_token",
             params={
-                "grant_type": "ig_exchange_token", "client_secret": self.app_secret,
-                "access_token": short["access_token"],
+                "client_id": self.app_id, "client_secret": self.app_secret,
+                "redirect_uri": self.redirect_uri, "code": code,
             },
+        ).get("access_token")
+        if not token:
+            raise InstagramError("Meta did not return an access token.")
+        accounts = _request(
+            "account lookup", "GET", f"{GRAPH}/{self.api_version}/me/accounts",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"fields": "instagram_business_account", "limit": 100},
         )
-        return self._credentials(str(short["user_id"]), long)
-
-    def refresh(self, credentials: InstagramCredentials) -> InstagramCredentials:
-        result = _request(
-            "token refresh", "GET", f"{GRAPH}/refresh_access_token",
-            params={"grant_type": "ig_refresh_token", "access_token": credentials.access_token},
-        )
-        return self._credentials(credentials.user_id, result)
-
-    @staticmethod
-    def _credentials(user_id, result):
-        try:
-            return InstagramCredentials(user_id, result["access_token"], int(result["expires_in"]))
-        except (KeyError, ValueError, TypeError):
-            raise InstagramError("Instagram did not return token expiry details.") from None
+        linked = {
+            str(page["instagram_business_account"]["id"])
+            for page in accounts.get("data", [])
+            if page.get("instagram_business_account", {}).get("id")
+        }
+        if len(linked) != 1 or accounts.get("paging", {}).get("next"):
+            raise InstagramError("Authorize exactly one Facebook Page linked to a professional Instagram account.")
+        return InstagramCredentials(linked.pop(), token)
 
     def _media_request(self, credentials, edge, data) -> str:
         if not credentials.user_id.isascii() or not credentials.user_id.isdecimal():
@@ -135,181 +123,141 @@ def next_photo_step(upload_url: str, *, image_uploaded: bool = False,
                 "action": {"label": "Connect Instagram", "url": authorization_url}}
     return {"step": "caption", "response": "What caption should I post with this photo?"}
 
-# Chat routes keep credentials in the backend and bind each draft to an HttpOnly cookie.
 import os
-from pathlib import Path
-from threading import Lock
-from time import monotonic
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from typing import Annotated
-from uuid import UUID
 
-from dotenv import dotenv_values
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import PlainTextResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from auth.dependencies import get_current_user
 from database.models import User
+from database.session import get_db
 
 instagram_router = APIRouter(prefix="/instagram", tags=["instagram"])
 COOKIE = "apnasathi_instagram_draft"
 DRAFT_SECONDS = 30 * 60
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
-_drafts = {}
-_draft_lock = Lock()
-
-
-@dataclass
-class PhotoDraft:
-    expires_at: float
-    state: str
-    authorization_url: str
-    image_key: str
-    image: bytes = field(repr=False)
-    owner_id: UUID
-    credentials: InstagramCredentials | None = field(default=None, repr=False)
-    phase: str = "authorization"
-    media_id: str | None = None
+CurrentUser = Annotated[User, Depends(get_current_user)]
+Database = Annotated[Session, Depends(get_db)]
 
 
 def _configured_agent():
-    config = dotenv_values(Path(__file__).with_name(".env"))
-    keys = ("INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "INSTAGRAM_REDIRECT_URI", "INSTAGRAM_API_VERSION")
-    values = [os.getenv(key) or config.get(key) for key in keys]
-    if not all(values):
-        raise HTTPException(503, "Your draft is ready. Instagram connection is unavailable until the app owner finishes the Meta setup.")
-    agent = InstagramAgent(*values)
-    redirect = urlsplit(agent.redirect_uri)
-    if redirect.scheme != "https" or not redirect.hostname:
-        raise HTTPException(503, "Instagram requires a public HTTPS callback.")
-    return agent
+    secret = os.getenv("INSTAGRAM_APP_SECRET")
+    version = os.getenv("INSTAGRAM_API_VERSION")
+    origin = os.getenv("INSTAGRAM_IMAGE_ORIGIN", "").rstrip("/")
+    parsed = urlsplit(origin)
+    if not secret or not version or parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.path or parsed.query or parsed.fragment:
+        raise HTTPException(503, "Instagram publishing is unavailable until the app owner finishes the Meta setup.")
+    return InstagramAgent(META_APP_ID, secret, META_CALLBACK, version), origin
 
 
-def _active_drafts():
-    now = monotonic()
-    for expired in [key for key, draft in _drafts.items() if draft.expires_at <= now]:
-        del _drafts[expired]
-    return _drafts
-
-
-def _get_draft(request: Request, owner_id: UUID | None = None):
-    draft = _active_drafts().get(request.cookies.get(COOKIE))
-    if draft is None or (owner_id is not None and draft.owner_id != owner_id):
-        raise HTTPException(404, "This Instagram draft expired. Attach the photo again.")
-    return draft
+def _digest(value):
+    return sha256(value.encode()).hexdigest()
 
 
 @instagram_router.post("/photo", max_body_size=MAX_IMAGE_BYTES + 65536)
-def attach_photo(request: Request, response: Response, user: Annotated[User, Depends(get_current_user)], image: UploadFile = File(...)):
-    agent = _configured_agent()
+def attach_photo(
+    response: Response, user: CurrentUser, db: Database, image: UploadFile = File(...),
+    caption: str = Form("", max_length=2200), confirmed: bool = Form(False),
+):
+    if not confirmed:
+        raise HTTPException(422, "Confirm the photo and caption before connecting Instagram.")
+    agent, _ = _configured_agent()
     jpeg = image.file.read(MAX_IMAGE_BYTES + 1)
     if len(jpeg) > MAX_IMAGE_BYTES:
         raise HTTPException(413, "Choose a JPEG photo smaller than 8 MB.")
     if not (jpeg.startswith(b"\xff\xd8\xff") and jpeg.endswith(b"\xff\xd9")):
         raise HTTPException(415, "Choose a JPEG photo.")
-
     url, state = agent.begin_authorization()
     session = token_urlsafe(32)
-    with _draft_lock:
-        drafts = _active_drafts()
-        previous = request.cookies.get(COOKIE)
-        if previous in drafts and drafts[previous].owner_id == user.id:
-            if drafts[previous].phase == "publishing":
-                raise HTTPException(409, "Wait for the current Instagram post to finish.")
-            del drafts[previous]
-        if len(drafts) >= 16:
-            raise HTTPException(503, "Too many active Instagram drafts. Try again later.")
-        drafts[session] = PhotoDraft(monotonic() + DRAFT_SECONDS, state, url, token_urlsafe(32), jpeg, user.id)
+    now = datetime.now(timezone.utc)
+    db.execute(text("DELETE FROM instagram_drafts WHERE expires_at <= :now"), {"now": now})
+    db.execute(text("""
+        INSERT INTO instagram_drafts (id, owner_id, state_hash, image_key, image, caption, phase, expires_at)
+        VALUES (:id, :owner, :state, :image_key, :image, :caption, 'authorization', :expires)
+    """), {
+        "id": _digest(session), "owner": user.id, "state": _digest(state),
+        "image_key": _digest(token_urlsafe(32)), "image": jpeg, "caption": caption,
+        "expires": now + timedelta(seconds=DRAFT_SECONDS),
+    })
     response.set_cookie(COOKIE, session, max_age=DRAFT_SECONDS, httponly=True, secure=True, samesite="lax", path="/api/v1/instagram")
     return next_photo_step("", image_uploaded=True, authorization_url=url)
 
 
-@instagram_router.get("/callback", response_class=PlainTextResponse)
-def instagram_callback(request: Request, state: str = "", code: str = ""):
-    agent = _configured_agent()
-    with _draft_lock:
-        draft = _get_draft(request)
-        if draft.phase != "authorization" or not state or not compare_digest(state.encode(), draft.state.encode()):
-            raise HTTPException(400, "This Instagram authorization request is invalid or expired.")
-        expected_state, draft.state = draft.state, ""
-        draft.phase = "connecting"
-    try:
-        token = agent.exchange_code(code, state, expected_state)
-    except InstagramError:
-        with _draft_lock:
-            draft.phase = "failed"
-        raise HTTPException(400, "Instagram authorization failed. You can return to the chat.") from None
-    with _draft_lock:
-        draft.credentials = token
-        draft.phase = "caption"
-    return "Instagram connected. Return to the ApnaSathi chat to enter your caption."
-
-
-@instagram_router.get("/status")
-def instagram_status(request: Request, user: Annotated[User, Depends(get_current_user)]):
-    with _draft_lock:
-        draft = _get_draft(request, user.id)
-        if draft.phase == "caption":
-            return next_photo_step("", image_uploaded=True, connected=True)
-        return {"step": draft.phase, "media_id": draft.media_id}
-
-
-@instagram_router.get("/image/{image_key}")
-def instagram_image(image_key: str):
-    # Instagram fetches this short-lived JPEG without sending the browser's draft cookie.
-    with _draft_lock:
-        for draft in _active_drafts().values():
-            if draft.image_key == image_key and draft.phase == "publishing":
-                return Response(draft.image, media_type="image/jpeg", headers={
-                    "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
-                })
-    raise HTTPException(404, "Image unavailable.")
-
-
-@instagram_router.post("/publish")
-def publish_instagram_photo(
-    request: Request, user: Annotated[User, Depends(get_current_user)],
-    caption: str = Form("", max_length=2200), confirmed: bool = Form(False),
+@instagram_router.post("/callback", response_class=PlainTextResponse)
+def instagram_callback(
+    request: Request, db: Database, state: str = Form("", max_length=128),
+    code: str = Form("", max_length=4096),
 ):
-    if not confirmed:
-        raise HTTPException(422, "Review and confirm the post before publishing.")
-    agent = _configured_agent()
-    with _draft_lock:
-        draft = _get_draft(request, user.id)
-        if draft.phase == "published":
-            return {"step": "published", "media_id": draft.media_id, "response": "Your photo was posted to Instagram."}
-        if draft.phase != "caption" or draft.credentials is None:
-            raise HTTPException(409, "Connect Instagram before publishing this draft.")
-        token = draft.credentials
-        draft.phase = "publishing"
-    origin = urlsplit(agent.redirect_uri)
-    image_url = f"{origin.scheme}://{origin.netloc}/api/v1/instagram/image/{draft.image_key}"
+    session = request.cookies.get(COOKIE)
+    if not session or not state:
+        raise HTTPException(400, "This Instagram authorization request is invalid or expired.")
+    agent, origin = _configured_agent()
+    draft = db.execute(text("""
+        UPDATE instagram_drafts SET phase = 'publishing', state_hash = NULL
+        WHERE id = :id AND state_hash = :state AND phase = 'authorization' AND expires_at > now()
+        RETURNING id, image_key, caption
+    """), {"id": _digest(session), "state": _digest(state)}).mappings().one_or_none()
+    if draft is None:
+        raise HTTPException(400, "This Instagram authorization request is invalid or expired.")
+    db.commit()
+
     try:
-        container = agent.create_photo(token, image_url, caption)
+        token = agent.exchange_code(code)
+        container = agent.create_photo(token, f"{origin}/api/v1/instagram/image/{draft['image_key']}", draft["caption"])
     except InstagramError as error:
-        with _draft_lock:
-            draft.phase = "caption"
-        raise HTTPException(502, str(error)) from None
+        _finish(db, draft["id"], "failed", str(error))
+        return "Instagram could not publish the photo. Return to ApnaSathi for details."
     try:
         media_id = agent.publish_photo(token, container)
     except InstagramError:
-        with _draft_lock:
-            draft.phase = "failed"
-            draft.image = b""
-            draft.credentials = None
-        raise HTTPException(502, "Instagram did not confirm the post. Check Instagram before trying again.") from None
-    with _draft_lock:
-        draft.media_id = media_id
-        draft.phase = "published"
-        draft.image = b""
-        draft.credentials = None
-    return {"step": "published", "media_id": media_id, "response": "Your photo was posted to Instagram."}
+        _finish(db, draft["id"], "uncertain", "Instagram did not confirm publication. Check your profile before trying again.")
+        return "Instagram did not confirm publication. Check your profile before trying again."
+    _finish(db, draft["id"], "published", "Your photo was posted to Instagram.", media_id)
+    return "Your photo was posted to Instagram. You can return to ApnaSathi."
+
+
+def _finish(db, draft_id, phase, notice, media_id=None):
+    db.execute(text("""
+        UPDATE instagram_drafts SET phase = :phase, notice = :notice, media_id = :media_id,
+        image = NULL, caption = ''
+        WHERE id = :id
+    """), {"id": draft_id, "phase": phase, "notice": notice, "media_id": media_id})
+
+
+@instagram_router.get("/status")
+def instagram_status(request: Request, user: CurrentUser, db: Database):
+    draft = db.execute(text("""
+        SELECT phase AS step, notice AS response, media_id FROM instagram_drafts
+        WHERE id = :id AND owner_id = :owner AND expires_at > now()
+    """), {"id": _digest(request.cookies.get(COOKIE, "")), "owner": user.id}).mappings().one_or_none()
+    if draft is None:
+        raise HTTPException(404, "This Instagram draft expired. Attach the photo again.")
+    return dict(draft)
+
+
+@instagram_router.get("/image/{image_key}")
+def instagram_image(image_key: str, db: Database):
+    image = db.scalar(text("""
+        SELECT image FROM instagram_drafts
+        WHERE image_key = :key AND phase = 'publishing' AND expires_at > now()
+    """), {"key": image_key})
+    if image is None:
+        raise HTTPException(404, "Image unavailable.")
+    return Response(bytes(image), media_type="image/jpeg", headers={
+        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+    })
 
 
 @instagram_router.delete("/draft", status_code=204)
-def cancel_instagram_draft(request: Request, response: Response, user: Annotated[User, Depends(get_current_user)]):
-    with _draft_lock:
-        draft = _get_draft(request, user.id)
-        if draft.phase == "publishing":
-            raise HTTPException(409, "Wait for the current Instagram post to finish.")
-        del _drafts[request.cookies[COOKIE]]
+def cancel_instagram_draft(request: Request, response: Response, user: CurrentUser, db: Database):
+    result = db.execute(text("""
+        DELETE FROM instagram_drafts WHERE id = :id AND owner_id = :owner AND phase <> 'publishing'
+    """), {"id": _digest(request.cookies.get(COOKIE, "")), "owner": user.id})
+    if not result.rowcount:
+        raise HTTPException(409, "This draft is unavailable or Instagram is processing it.")
     response.delete_cookie(COOKIE, path="/api/v1/instagram", secure=True, httponly=True)
