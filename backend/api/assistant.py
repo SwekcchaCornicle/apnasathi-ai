@@ -166,7 +166,7 @@ def assistant_chat(
     daily_actions = None
     previous_blinkit = bool(BLINKIT.search(question) and PREVIOUS_ORDER.search(question))
     shopping_active = bool(prior_shopping and not prior_shopping["done"])
-    cache_allowed = not (shopping_active or previous_blinkit or is_action_request(question) or CURRENT_INFO.search(question))
+    cache_allowed = not (shopping_active or previous_blinkit or DAILY_COMMAND.search(question) or is_action_request(question) or CURRENT_INFO.search(question))
     match = None
     if cache_allowed:
         try:

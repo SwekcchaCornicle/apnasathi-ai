@@ -1,7 +1,7 @@
 # Provider setup
 
 ## WhatsApp Business reminders
-The reminder worker sends approved Meta WhatsApp templates only. Create an AWS Secrets Manager JSON secret and pass its ARN as CDK context `whatsappSecretArn`. Required keys: `access_token`, `phone_number_id`, `reminder_template`, `graph_api_version`. The approved template must have one body placeholder for the reminder title. Each user must save an E.164 number through `PUT /api/v1/daily/whatsapp/phone`. The ECS worker runs as a separate service. It needs outbound HTTPS egress to Meta; use `networkEgress=nat` or the configured HTTPS proxy. Recipient opt-in and Meta template approval are mandatory.
+The reminder worker sends approved Meta WhatsApp templates only. Create an AWS Secrets Manager JSON secret and pass its ARN as CDK context `whatsappSecretArn`. Required keys: `access_token`, `phone_number_id`, `reminder_template`, `graph_api_version`, `template_language` (`en` or `hi`). The approved template must have one body placeholder for the reminder title. Each user must save an E.164 number through `PUT /api/v1/daily/whatsapp/phone`. The ECS worker runs as a separate service. It needs outbound HTTPS egress to Meta; use `networkEgress=nat` or the configured HTTPS proxy. Recipient opt-in and Meta template approval are mandatory.
 
 ## Google Calendar
 OAuth and event creation use per-user encrypted refresh tokens. Enable Google Calendar API and create an OAuth **Web application** client. Register redirect URI `https://YOUR_APP_DOMAIN/api/v1/daily/google/calendar/callback`. Create an AWS Secrets Manager JSON secret and pass its ARN as CDK context `googleCalendarSecretArn`, with keys `client_id`, `client_secret`, `redirect_uri`, and `token_encryption_key`. Generate a Fernet key with:

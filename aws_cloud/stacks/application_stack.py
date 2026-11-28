@@ -191,6 +191,7 @@ class ApplicationStack(Stack):
                 ("WHATSAPP_PHONE_NUMBER_ID", "phone_number_id"),
                 ("WHATSAPP_REMINDER_TEMPLATE", "reminder_template"),
                 ("WHATSAPP_GRAPH_API_VERSION", "graph_api_version"),
+                ("WHATSAPP_TEMPLATE_LANGUAGE", "template_language"),
             ):
                 whatsapp_secrets.append(ecs.CfnTaskDefinition.SecretProperty(
                     name=env_name, value_from=f"{whatsapp_secret_arn}:{json_key}::",
@@ -325,7 +326,6 @@ class ApplicationStack(Stack):
                             ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_HOST", value=database.database.attr_endpoint_address),
                             ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_PORT", value="5432"),
                             ecs.CfnTaskDefinition.KeyValuePairProperty(name="DB_NAME", value="apnasathi"),
-                            ecs.CfnTaskDefinition.KeyValuePairProperty(name="WHATSAPP_TEMPLATE_LANGUAGE", value="en"),
                             *(ecs.CfnTaskDefinition.KeyValuePairProperty(name=name, value=value) for name, value in ({"HTTPS_PROXY": https_proxy, "NO_PROXY": "localhost,127.0.0.1,169.254.170.2,169.254.170.23,169.254.169.254,.amazonaws.com"}.items() if https_proxy else [])),
                         ],
                         secrets=[
