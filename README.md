@@ -139,36 +139,10 @@ At a high level, ApnaSathi has four major areas:
 
 ### System context diagram
 
-```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
-flowchart TB
-    U[User]
-    B[Browser]
-    FE[React + Vite Frontend]
-    COG[Amazon Cognito]
-    API[FastAPI Backend]
-    AI[Gemini on Vertex AI]
-    EMB[Local multilingual E5 embeddings]
-    DB[(PostgreSQL + pgvector)]
-    S3[(Private S3 audio bucket)]
-    WM[Watchmode API]
-    META[Meta / Instagram Graph API]
-    RET[Retailer websites]
-    TTS[Piper text-to-speech]
-    U --> B
-    B --> FE
-    FE <-->|Sign-up / sign-in| COG
-    FE -->|Bearer ID token + JSON / multipart| API
-    API -->|Verify ID token / JWKS| COG
-    API -->|Intent classification| AI
-    API -->|Embedding generation / similarity helper| EMB
-    API <-->|Application persistence| DB
-    API -->|Upload / retrieve audio object| S3
-    API -->|Streaming availability lookup| WM
-    API <-->|OAuth and publishing workflow| META
-    API -->|Voice response| TTS
-    FE -->|User-controlled links| RET
-```
+![ApnaSathi request journey — visual sequence diagram](docs/architecture/request-journey.svg)
+
+**How to read it:** follow the numbered cards from left to right, then follow the decision branch. A semantic-cache hit can reuse a saved answer; otherwise the request continues through Gemini and the selected workflow.
+
 
 This diagram shows the logical integrations. It does not imply that every feature is invoked for every request. For example, a normal general question does not need Watchmode or the Instagram Graph API.
 

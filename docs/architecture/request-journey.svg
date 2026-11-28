@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1420" viewBox="0 0 1800 1420">
+<defs>
+ <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#F8F8F3"/><stop offset="1" stop-color="#E9EEE4"/></linearGradient>
+ <linearGradient id="head" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#263F32"/><stop offset="1" stop-color="#46634D"/></linearGradient>
+ <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto"><path d="M0 0 L0 8 L10 4 z" fill="#526B59"/></marker>
+ <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#263F32" flood-opacity=".12"/></filter>
+</defs>
+<rect width="1800" height="1420" rx="34" fill="url(#bg)"/>
+<rect x="34" y="30" width="1732" height="160" rx="28" fill="url(#head)"/>
+<text x="82" y="93" font-family="Arial,sans-serif" font-size="43" font-weight="700" fill="#FFFFFF">Inside one ApnaSathi conversation</text>
+<text x="84" y="145" font-family="Arial,sans-serif" font-size="24" fill="#E2EBD8">From the first message to a useful, structured answer — including the fast path when a relevant answer can be reused.</text>
+
+<!-- Stage labels -->
+<g font-family="Arial,sans-serif" font-weight="700" font-size="22">
+ <rect x="58" y="225" width="390" height="54" rx="16" fill="#DCE9D9"/><text x="82" y="260" fill="#294734">01  ·  THE REQUEST</text>
+ <rect x="474" y="225" width="390" height="54" rx="16" fill="#F2E0C9"/><text x="498" y="260" fill="#694B2C">02  ·  IDENTITY &amp; CONTEXT</text>
+ <rect x="890" y="225" width="390" height="54" rx="16" fill="#DCE7F1"/><text x="914" y="260" fill="#294A68">03  ·  INTELLIGENCE</text>
+ <rect x="1306" y="225" width="436" height="54" rx="16" fill="#E9DFF0"/><text x="1330" y="260" fill="#563A68">04  ·  ACTION &amp; RESPONSE</text>
+</g>
+<!-- main cards -->
+<g filter="url(#shadow)" font-family="Arial,sans-serif">
+ <rect x="58" y="320" width="350" height="170" rx="22" fill="#FFFFFF" stroke="#6F9874" stroke-width="3"/>
+ <circle cx="100" cy="365" r="24" fill="#354A3B"/><text x="100" y="374" text-anchor="middle" font-size="23" font-weight="700" fill="#FFFFFF">1</text>
+ <text x="140" y="373" font-size="28" font-weight="700" fill="#263F32">You ask</text>
+ <text x="86" y="423" font-size="22" fill="#354A3B">Type or speak naturally</text>
+ <text x="86" y="458" font-size="18" fill="#68766A">English · Hindi</text>
+
+ <rect x="474" y="320" width="350" height="170" rx="22" fill="#FFFFFF" stroke="#D5A874" stroke-width="3"/>
+ <circle cx="516" cy="365" r="24" fill="#9A7045"/><text x="516" y="374" text-anchor="middle" font-size="23" font-weight="700" fill="#FFFFFF">2</text>
+ <text x="556" y="373" font-size="28" font-weight="700" fill="#513A25">React sends it</text>
+ <text x="502" y="423" font-size="22" fill="#354A3B">ChatWorkspace calls</text>
+ <text x="502" y="458" font-size="20" font-weight="700" fill="#354A3B">POST /assistant/chat</text>
+
+ <rect x="890" y="320" width="350" height="170" rx="22" fill="#FFFFFF" stroke="#6B91B6" stroke-width="3"/>
+ <circle cx="932" cy="365" r="24" fill="#426C91"/><text x="932" y="374" text-anchor="middle" font-size="23" font-weight="700" fill="#FFFFFF">3</text>
+ <text x="972" y="373" font-size="28" font-weight="700" fill="#294A68">FastAPI receives</text>
+ <text x="918" y="423" font-size="22" fill="#354A3B">Checks request and</text>
+ <text x="918" y="458" font-size="22" fill="#354A3B">coordinates the flow</text>
+
+ <rect x="1306" y="320" width="436" height="170" rx="22" fill="#FFFFFF" stroke="#9B7BB0" stroke-width="3"/>
+ <circle cx="1348" cy="365" r="24" fill="#70518A"/><text x="1348" y="374" text-anchor="middle" font-size="23" font-weight="700" fill="#FFFFFF">4</text>
+ <text x="1388" y="373" font-size="28" font-weight="700" fill="#563A68">Verify identity</text>
+ <text x="1334" y="423" font-size="22" fill="#354A3B">Cognito JWT signature,</text>
+ <text x="1334" y="458" font-size="22" fill="#354A3B">claims and user identity</text>
+</g>
+<g stroke="#526B59" stroke-width="5" fill="none" marker-end="url(#arrow)"><path d="M408 405 H466"/><path d="M824 405 H882"/><path d="M1240 405 H1298"/></g>
+
+<!-- persistence row -->
+<g filter="url(#shadow)" font-family="Arial,sans-serif">
+ <rect x="270" y="570" width="570" height="150" rx="22" fill="#FFFFFF" stroke="#6F9874" stroke-width="3"/>
+ <rect x="270" y="570" width="14" height="150" rx="7" fill="#527B58"/>
+ <text x="312" y="622" font-size="28" font-weight="700" fill="#263F32">5  ·  Load conversation</text>
+ <text x="312" y="666" font-size="22" fill="#354A3B">PostgreSQL checks ownership, loads recent</text><text x="312" y="697" font-size="22" fill="#354A3B">messages, and stores the new user message.</text>
+ <rect x="960" y="570" width="570" height="150" rx="22" fill="#FFFFFF" stroke="#6B91B6" stroke-width="3"/>
+ <rect x="960" y="570" width="14" height="150" rx="7" fill="#426C91"/>
+ <text x="1002" y="622" font-size="28" font-weight="700" fill="#294A68">6  ·  Check semantic reuse</text>
+ <text x="1002" y="666" font-size="22" fill="#354A3B">E5 creates a query vector; pgvector helper</text><text x="1002" y="697" font-size="22" fill="#354A3B">checks whether a suitable answer can be reused.</text>
+</g>
+<g stroke="#526B59" stroke-width="5" fill="none" marker-end="url(#arrow)"><path d="M1524 490 V530 H555 V562"/><path d="M840 645 H952"/></g>
+
+<!-- decision -->
+<path d="M1245 720 V770" stroke="#526B59" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
+<path d="M1245 770 L1390 850 L1245 930 L1100 850 Z" fill="#FFF7E9" stroke="#C28C4D" stroke-width="4" filter="url(#shadow)"/>
+<text x="1245" y="842" text-anchor="middle" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#674A2B">Good match?</text>
+<text x="1245" y="875" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" fill="#674A2B">Eligible + above threshold</text>
+<!-- branch hit -->
+<path d="M1100 850 H720 V985" stroke="#4F8A60" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
+<rect x="350" y="985" width="740" height="150" rx="22" fill="#E2F1E3" stroke="#4F8A60" stroke-width="3" filter="url(#shadow)"/>
+<text x="390" y="1037" font-family="Arial,sans-serif" font-size="28" font-weight="700" fill="#285B35">⚡ YES · Cache hit</text>
+<text x="390" y="1080" font-family="Arial,sans-serif" font-size="22" fill="#294734">Reuse the saved answer and its similarity result.</text>
+<!-- branch miss -->
+<path d="M1390 850 H1530 V985" stroke="#B27A3F" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
+<rect x="1140" y="985" width="600" height="150" rx="22" fill="#F8EBDD" stroke="#B27A3F" stroke-width="3" filter="url(#shadow)"/>
+<text x="1180" y="1037" font-family="Arial,sans-serif" font-size="28" font-weight="700" fill="#70451F">✦ NO · Ask Gemini</text>
+<text x="1180" y="1080" font-family="Arial,sans-serif" font-size="22" fill="#553C28">Build context, then request structured intent JSON.</text>
+<!-- Gemini and workflow -->
+<path d="M1440 1135 V1170 H1150 V1200" stroke="#B27A3F" stroke-width="5" fill="none" marker-end="url(#arrow)"/>
+<path d="M720 1135 V1170 H1150" stroke="#4F8A60" stroke-width="5" fill="none"/>
+<rect x="600" y="1200" width="1100" height="150" rx="22" fill="#FFFFFF" stroke="#70518A" stroke-width="3" filter="url(#shadow)"/>
+<text x="650" y="1252" font-family="Arial,sans-serif" font-size="28" font-weight="700" fill="#563A68">7  ·  Route, save and respond</text>
+<text x="650" y="1294" font-family="Arial,sans-serif" font-size="22" fill="#354A3B">Workflow handler returns action data → PostgreSQL stores the assistant reply</text>
+<text x="650" y="1327" font-family="Arial,sans-serif" font-size="22" fill="#354A3B">→ FastAPI sends structured JSON → React renders the answer and controls.</text>
+<text x="68" y="1380" font-family="Arial,sans-serif" font-size="17" fill="#68766A">Conceptual request flow based on the repository's chat orchestration; exact workflow branches depend on the selected intent.</text>
+</svg>
