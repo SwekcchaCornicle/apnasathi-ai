@@ -13,7 +13,7 @@ from database.models import User
 from database.session import get_db
 from llm_model.llm_model import VertexUnavailable
 
-router = APIRouter(prefix="/api/v1/daily", tags=["daily-assistant"])
+router = APIRouter(prefix="/daily", tags=["daily-assistant"])
 UserDep = Annotated[User, Depends(get_current_user)]
 DbDep = Annotated[Session, Depends(get_db)]
 
