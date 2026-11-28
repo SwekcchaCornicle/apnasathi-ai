@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from agents.daily_planner import plan_daily_command
 from auth.dependencies import get_current_user
 from database.daily_models import DailyAction, Reminder, DailyTask, ShoppingList, Expense, MealPlan, MessageDraft
-from database.models import User
+from database.models import User, UserProfile
 from database.session import get_db
 from llm_model.llm_model import VertexUnavailable
 from integrations.google_calendar import GoogleCalendarError, create_calendar_event, google_oauth_url, exchange_google_code, encrypt_refresh_token
@@ -205,3 +205,24 @@ def add_calendar_event(data: CalendarEventInput, user: UserDep, db: DbDep):
     try: event = create_calendar_event(db, user.id, data.model_dump())
     except GoogleCalendarError as exc: raise HTTPException(exc.status_code, str(exc)) from None
     return {"id": event["id"], "html_link": event.get("htmlLink"), "status": event.get("status")}
+
+
+class WhatsAppPhoneInput(BaseModel):
+    phone: str = Field(min_length=8, max_length=16, pattern=r"^\\+[1-9][0-9]{7,14}$")
+
+@router.put("/whatsapp/phone")
+def set_whatsapp_phone(data: WhatsAppPhoneInput, user: UserDep, db: DbDep):
+    profile = db.get(UserProfile, user.id)
+    if profile is None:
+        profile = UserProfile(user_id=user.id, whatsapp_phone=data.phone)
+        db.add(profile)
+    else:
+        profile.whatsapp_phone = data.phone
+    return {"configured": True, "phone": "••••" + data.phone[-4:]}
+
+@router.delete("/whatsapp/phone")
+def clear_whatsapp_phone(user: UserDep, db: DbDep):
+    profile = db.get(UserProfile, user.id)
+    if profile is not None:
+        profile.whatsapp_phone = None
+    return {"configured": False}
