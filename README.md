@@ -111,6 +111,22 @@ The repository also contains the language-selection and Cognito account screens,
 
 ---
 
+## ApnaSathi visual palette
+
+The diagrams and visual accents in this README follow the same quiet, earthy palette used by the React interface in `frontend/src/styles.css`. AWS service icons retain their official AWS colours; the surrounding cards, diagram surfaces, borders, and connectors use ApnaSathi colours so the documentation feels like part of the product.
+
+| Palette role | Colour | Hex |
+| --- | --- | --- |
+| Deep forest — primary surfaces | <span style="display:inline-block;width:18px;height:18px;background:#354a3b;border-radius:4px;vertical-align:middle"></span> | `#354A3B` |
+| Button green — primary actions | <span style="display:inline-block;width:18px;height:18px;background:#405a46;border-radius:4px;vertical-align:middle"></span> | `#405A46` |
+| Sage — diagram fills | <span style="display:inline-block;width:18px;height:18px;background:#d5ddbd;border-radius:4px;vertical-align:middle"></span> | `#D5DDBD` |
+| Soft sage — data and secondary panels | <span style="display:inline-block;width:18px;height:18px;background:#edf0e6;border-radius:4px;vertical-align:middle"></span> | `#EDF0E6` |
+| Warm sand — highlights | <span style="display:inline-block;width:18px;height:18px;background:#d5a874;border-radius:4px;vertical-align:middle"></span> | `#D5A874` |
+| Warm paper — diagram canvas | <span style="display:inline-block;width:18px;height:18px;background:#fbfaf7;border:1px solid #ddd;border-radius:4px;vertical-align:middle"></span> | `#FBFAF7` |
+| Ink — body text | <span style="display:inline-block;width:18px;height:18px;background:#252a23;border-radius:4px;vertical-align:middle"></span> | `#252A23` |
+
+---
+
 ## 3. High-level architecture
 
 At a high level, ApnaSathi has four major areas:
@@ -124,10 +140,23 @@ At a high level, ApnaSathi has four major areas:
 
 ```mermaid
 flowchart TB
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class U,B,FE forest;
+  class API green;
+  class COG,AI,EMB,TTS sage;
+  class DB,S3 pale;
+  class WM,META,RET external;
     U[User]
     B[Browser]
     FE[React + Vite Frontend]
-    COG[Amazon Cognito]
+    COG[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Security-Identity-Compliance/48/Arch_Amazon-Cognito_48.svg' width='42'><br/>Amazon Cognito]
     API[FastAPI Backend]
     AI[Gemini on Vertex AI]
     EMB[Local multilingual E5 embeddings]
@@ -158,23 +187,35 @@ This diagram shows the logical integrations. It does not imply that every featur
 
 ```mermaid
 flowchart TB
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class Browser forest;
+  class Gateway,ALB,ECS,Logs green;
+  class Site,RDS,ECR,Secrets,Audio sage;
+  class Cognito sand;
     Browser[User browser]
     Cognito[Amazon Cognito]
-    Site[S3 website assets]
-    Gateway[API Gateway HTTPS gateway]
-    ALB[Internet-facing Application Load Balancer]
+    Site[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Storage/48/Arch_Amazon-Simple-Storage-Service_48.svg' width='42'><br/>S3 website assets]
+    Gateway[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Networking-Content-Delivery/48/Arch_Amazon-API-Gateway_48.svg' width='42'><br/>API Gateway HTTPS]
+    ALB[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Networking-Content-Delivery/48/Arch_Elastic-Load-Balancing_48.svg' width='42'><br/>Application Load Balancer]
     subgraph VPC["AWS VPC 10.20.0.0/16"]
       subgraph Public["Public subnets · ap-south-1a and ap-south-1b"]
         ALB
       end
       subgraph Private["Private subnets · ap-south-1a and ap-south-1b"]
-        ECS[ECS Fargate · Linux ARM64 · FastAPI :8000]
-        RDS[(RDS PostgreSQL)]
+        ECS[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Containers/48/Arch_Amazon-Elastic-Container-Service_48.svg' width='42'><br/>ECS Fargate · Linux ARM64 · FastAPI :8000]
+        RDS[(<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Database/48/Arch_Amazon-RDS_48.svg' width='42'><br/>RDS PostgreSQL)]
       end
-      ECR[ECR image repository]
-      Logs[CloudWatch Logs]
-      Secrets[Secrets Manager]
-      Audio[(Private S3 audio bucket)]
+      ECR[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Containers/48/Arch_Amazon-Elastic-Container-Registry_48.svg' width='42'><br/>ECR image repository]
+      Logs[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Management-Governance/48/Arch_Amazon-CloudWatch_48.svg' width='42'><br/>CloudWatch Logs]
+      Secrets[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Security-Identity-Compliance/48/Arch_AWS-Secrets-Manager_48.svg' width='42'><br/>Secrets Manager]
+      Audio[(<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Storage/48/Arch_Amazon-Simple-Storage-Service_48.svg' width='42'><br/>Private S3 audio bucket)]
     end
     Browser --> Site
     Browser --> Cognito
@@ -279,6 +320,14 @@ The backend persists the assistant message and a search-history record, updates 
 
 ```mermaid
 sequenceDiagram
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
     actor User
     participant React as React ChatWorkspace
     participant API as FastAPI
@@ -332,6 +381,19 @@ The dependencies and scripts are defined in `frontend/package.json`.
 
 ```mermaid
 flowchart TB
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class LANG forest;
+  class MAIN sage;
+  class REC,AUDIO pale;
+  class COG sand;
+  class APP,LOGIN,CHAT,DRAFT,CSS paper;
     MAIN[main.jsx]
     APP[App.jsx]
     LANG[LanguageStep]
@@ -476,6 +538,18 @@ The API routers are mounted by `backend/app.py`. Refer to the route functions fo
 
 ```mermaid
 flowchart TB
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class LLM sage;
+  class DB,EMB,STORAGE pale;
+  class AUTH sand;
+  class APP,ROUTERS,AGENTS,SERVICES,TRACE paper;
     APP[backend/app.py]
     ROUTERS[API routers]
     AUTH[auth/]
@@ -593,6 +667,15 @@ This module validates audio types and file signatures, enforces a 25 MiB file li
 
 ```mermaid
 flowchart TD
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class R green;
     R[HTTP request] --> MW[FastAPI middleware and tracing]
     MW --> AUTH{Protected route?}
     AUTH -->|Yes| JWT[Verify Cognito ID token]
@@ -709,6 +792,15 @@ Action requests and current-information questions are not supposed to be answere
 
 ```mermaid
 flowchart TD
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class Q forest;
     Q[User question] --> CLEAN[Normalize question]
     CLEAN --> ELIGIBLE{Eligible for reuse?}
     ELIGIBLE -->|No| CTX[Build current conversation context]
@@ -765,6 +857,14 @@ Simplified state flow:
 
 ```mermaid
 stateDiagram-v2
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
     [*] --> ChooseStore
     ChooseStore --> SignIn: Store selected
     SignIn --> EnterItems: User confirms sign-in
@@ -805,6 +905,14 @@ Simplified sequence:
 
 ```mermaid
 sequenceDiagram
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
     actor User
     participant UI as InstagramDraft
     participant API as FastAPI Instagram router
@@ -875,6 +983,17 @@ The database connection is created in `backend/database/session.py`. It accepts 
 
 ```mermaid
 erDiagram
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class USERS,USER_PROFILES forest;
+  class KNOWLEDGE_EMBEDDINGS pale;
+  class CONVERSATIONS,MESSAGES,SEARCH_HISTORY,MEMORIES,AGENT_EXECUTIONS,INSTAGRAM_DRAFTS paper;
     USERS ||--|| USER_PROFILES : has
     USERS ||--o{ CONVERSATIONS : owns
     USERS ||--o{ MESSAGES : authors
@@ -1096,6 +1215,15 @@ Run migrations explicitly; do not assume creating an RDS instance automatically 
 
 ```mermaid
 flowchart TD
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class REQ pale;
     REQ[Request with DB dependency] --> FACTORY[Get cached SQLAlchemy session factory]
     FACTORY --> ENGINE[Cached SQLAlchemy engine]
     ENGINE --> CONNECT[PostgreSQL connection]
@@ -1144,6 +1272,15 @@ For transcription, the backend downloads the object into a temporary directory, 
 
 ```mermaid
 flowchart TD
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class MIC pale;
     MIC[Browser microphone] --> BLOB[MediaRecorder audio blob]
     BLOB --> API[POST /assistant/audio]
     API --> CHECK[Validate size, MIME type and file signature]
@@ -1204,6 +1341,17 @@ The ALB sits in public subnets. ECS tasks and RDS are placed in private subnets.
 
 ```mermaid
 flowchart TB
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class PUBA,PRIA,PUBB,PRIB,ECS,ENDPOINTS green;
+  class RDS sage;
+  class INTERNET,IGW,ALB external;
     INTERNET((Internet))
     IGW[Internet Gateway]
     subgraph VPC["VPC 10.20.0.0/16"]
@@ -1215,10 +1363,10 @@ flowchart TB
         PUBB[Public subnet 10.20.2.0/24]
         PRIB[Private subnet 10.20.12.0/24]
       end
-      ALB[Internet-facing ALB :80]
-      ECS[ECS Fargate task :8000]
-      RDS[(RDS PostgreSQL :5432)]
-      ENDPOINTS[VPC endpoints]
+      ALB[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Networking-Content-Delivery/48/Arch_Elastic-Load-Balancing_48.svg' width='42'><br/>Internet-facing ALB :80]
+      ECS[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Containers/48/Arch_Amazon-Elastic-Container-Service_48.svg' width='42'><br/>ECS Fargate task :8000]
+      RDS[(<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Database/48/Arch_Amazon-RDS_48.svg' width='42'><br/>RDS PostgreSQL :5432)]
+      ENDPOINTS[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Networking-Content-Delivery/48/Arch_Amazon-Virtual-Private-Cloud_48.svg' width='42'><br/>VPC endpoints]
     end
     INTERNET --> IGW
     IGW --> PUBA
@@ -1377,17 +1525,30 @@ The CDK and deployment notes require the Google project, WIF secret ARN, and app
 
 ```mermaid
 flowchart LR
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class GHA forest;
+  class CDK,ECS,ALB,CW green;
+  class IAM,ECR,RDS,S3,SM,VERTEX sage;
+  class OIDC sand;
+  class WIF paper;
     GHA[GitHub Actions]
     OIDC[GitHub OIDC identity token]
-    IAM[AWS IAM deployment role]
-    CDK[AWS CDK / CloudFormation]
-    ECR[(Amazon ECR)]
-    ECS[ECS Fargate service]
-    ALB[Application Load Balancer]
-    RDS[(RDS PostgreSQL)]
-    S3[(S3 audio bucket)]
-    SM[AWS Secrets Manager]
-    CW[CloudWatch Logs]
+    IAM[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Security-Identity-Compliance/48/Arch_AWS-Identity-and-Access-Management_48.svg' width='42'><br/>AWS IAM deployment role]
+    CDK[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Management-Governance/48/Arch_AWS-CloudFormation_48.svg' width='42'><br/>AWS CDK / CloudFormation]
+    ECR[(<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Containers/48/Arch_Amazon-Elastic-Container-Registry_48.svg' width='42'><br/>Amazon ECR)]
+    ECS[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Containers/48/Arch_Amazon-Elastic-Container-Service_48.svg' width='42'><br/>ECS Fargate service]
+    ALB[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Networking-Content-Delivery/48/Arch_Elastic-Load-Balancing_48.svg' width='42'><br/>Application Load Balancer]
+    RDS[(<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Database/48/Arch_Amazon-RDS_48.svg' width='42'><br/>RDS PostgreSQL)]
+    S3[(<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Storage/48/Arch_Amazon-Simple-Storage-Service_48.svg' width='42'><br/>S3 audio bucket)]
+    SM[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Security-Identity-Compliance/48/Arch_AWS-Secrets-Manager_48.svg' width='42'><br/>AWS Secrets Manager]
+    CW[<img src='https://raw.githubusercontent.com/icacho-dev/aws-architecture-icons/main/Architecture-Service-Icons_02072025/Arch_Management-Governance/48/Arch_Amazon-CloudWatch_48.svg' width='42'><br/>CloudWatch Logs]
     WIF[Google Workload Identity Federation]
     VERTEX[Vertex AI]
     GHA --> OIDC --> IAM --> CDK
@@ -1545,6 +1706,19 @@ This pipeline is a manual release workflow. A successful container health check 
 
 ```mermaid
 flowchart TD
+  classDef forest fill:#354a3b,stroke:#354a3b,color:#fbfaf7,stroke-width:2px;
+  classDef green fill:#405a46,stroke:#354a3b,color:#fbfaf7,stroke-width:1.8px;
+  classDef sage fill:#d5ddbd,stroke:#76886f,color:#252a23,stroke-width:1.5px;
+  classDef pale fill:#edf0e6,stroke:#647a63,color:#252a23,stroke-width:1.5px;
+  classDef sand fill:#f2e4d2,stroke:#d5a874,color:#252a23,stroke-width:1.5px;
+  classDef paper fill:#fbfaf7,stroke:#9a9a8f,color:#252a23,stroke-width:1.3px;
+  classDef external fill:#f2f1ed,stroke:#b5b4a9,color:#252a23,stroke-width:1.3px;
+  linkStyle default stroke:#76886f,stroke-width:1.8px;
+  class BUILD forest;
+  class CHECK,EXISTS,BOOTSTRAP,INFRA,SYNTH,ECS,GATEWAY green;
+  class START,SMOKE,STABLE sage;
+  class PUSH,SITE pale;
+  class BOOT,APP,IMAGE paper;
     START[Maintainer starts workflow_dispatch]
     BOOT[Reusable bootstrap workflow]
     CHECK[Assume infrastructure role with OIDC]
