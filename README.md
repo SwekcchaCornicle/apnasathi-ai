@@ -164,7 +164,7 @@ This diagram shows the logical integrations. It does not imply that every featur
 ### Runtime deployment diagram ☁️
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TB
   U([🌐 User / Browser]) --> FE[🌿 React + Vite]
   FE -->|Sign in| COG[🔐 Amazon Cognito]
@@ -277,7 +277,7 @@ The backend persists the assistant message and a search-history record, updates 
 ### Request sequence diagram 🔄
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 sequenceDiagram
     actor User
     participant React as React ChatWorkspace
@@ -331,7 +331,7 @@ The dependencies and scripts are defined in `frontend/package.json`.
 ### Frontend component map 🧩
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TB
     MAIN[main.jsx]
     APP[App.jsx]
@@ -476,7 +476,7 @@ The API routers are mounted by `backend/app.py`. Refer to the route functions fo
 ### Backend package structure 🗂️
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TB
     APP[backend/app.py]
     ROUTERS[API routers]
@@ -594,7 +594,7 @@ This module validates audio types and file signatures, enforces a 25 MiB file li
 ### API request path at a glance 🛤️
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TD
     R[HTTP request] --> MW[FastAPI middleware and tracing]
     MW --> AUTH{Protected route?}
@@ -711,7 +711,7 @@ Action requests and current-information questions are not supposed to be answere
 ### 7.6 Retrieval and LLM flow 🔹
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TD
     Q[User question] --> CLEAN[Normalize question]
     CLEAN --> ELIGIBLE{Eligible for reuse?}
@@ -768,7 +768,7 @@ The session stores:
 Simplified state flow:
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 stateDiagram-v2
     [*] --> ChooseStore
     ChooseStore --> SignIn: Store selected
@@ -809,7 +809,7 @@ The Instagram workflow uses the Meta Graph API and a professional Instagram acco
 Simplified sequence:
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 sequenceDiagram
     actor User
     participant UI as InstagramDraft
@@ -880,7 +880,7 @@ The database connection is created in `backend/database/session.py`. It accepts 
 ### Entity relationship diagram 🔗
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 erDiagram
     USERS ||--|| USER_PROFILES : has
     USERS ||--o{ CONVERSATIONS : owns
@@ -1102,7 +1102,7 @@ Run migrations explicitly; do not assume creating an RDS instance automatically 
 ### Database connection lifecycle
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TD
     REQ[Request with DB dependency] --> FACTORY[Get cached SQLAlchemy session factory]
     FACTORY --> ENGINE[Cached SQLAlchemy engine]
@@ -1151,7 +1151,7 @@ For transcription, the backend downloads the object into a temporary directory, 
 ### Audio upload flow
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TD
     MIC[Browser microphone] --> BLOB[MediaRecorder audio blob]
     BLOB --> API[POST /assistant/audio]
@@ -1239,7 +1239,7 @@ The ALB sits in public subnets. ECS tasks and RDS are placed in private subnets.
 ### Network diagram 🗺️
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TB
     INTERNET((Internet))
     IGW[Internet Gateway]
@@ -1413,7 +1413,7 @@ The CDK and deployment notes require the Google project, WIF secret ARN, and app
 ### 11.11 AWS component interaction diagram 🔹
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart LR
     GHA[GitHub Actions]
     OIDC[GitHub OIDC identity token]
@@ -1582,7 +1582,7 @@ This pipeline is a manual release workflow. A successful container health check 
 ### CI/CD diagram 🚦
 
 ```mermaid
-  %%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7","fontFamily":"Inter, Arial"}}}%%
+%%{init: {"theme":"base","themeVariables":{"primaryColor":"#D5DDBD","primaryTextColor":"#252A23","primaryBorderColor":"#354A3B","lineColor":"#76886F","secondaryColor":"#EDF0E6","tertiaryColor":"#F2E4D2","background":"#FBFAF7"}}}%%
 flowchart TD
     START[Maintainer starts workflow_dispatch]
     BOOT[Reusable bootstrap workflow]
